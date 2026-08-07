@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UI_VERSION="0.0.1-alpha"
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Error: library not found at $UI_LIB" >&2
+    echo "Please run the install script first." >&2
+    exit 1
+fi
+
+usage() {
+    cat <<EOF
+u-uninstall $UI_VERSION
+
+Usage: u-uninstall [OPTIONS] <PACKAGE...>
+
+Options:
+  -y, --yes   Assume yes to all prompts
+  -h, --help  Show this help message
+EOF
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 1
+    fi
+
+    ui_info "u-uninstall v$UI_VERSION (alpha)"
+    ui_info "This is a placeholder. Full implementation coming soon."
+
+    for pkg in "$@"; do
+        case "$pkg" in
+            -h|--help) usage; exit 0 ;;
+            -y|--yes) ;; # TODO: parse flags
+            *)
+                ui_info "Requested removal: $pkg"
+                ;;
+        esac
+    done
+}
+
+main "$@"

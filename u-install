@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UI_VERSION="0.0.1-alpha"
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Error: library not found at $UI_LIB" >&2
+    echo "Please run the install script first." >&2
+    exit 1
+fi
+
+usage() {
+    cat <<EOF
+u-install $UI_VERSION
+
+Usage: u-install [OPTIONS] <PACKAGE...>
+
+Options:
+  --native    Force native package manager
+  --nix       Force Nix
+  --aur       Force AUR (Arch-based only)
+  -y, --yes   Assume yes to all prompts
+  -h, --help  Show this help message
+
+Examples:
+  u-install neovim
+  u-install firefox --nix
+  u-install neovim-git --aur
+EOF
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 1
+    fi
+
+    ui_info "u-install v$UI_VERSION (alpha)"
+    ui_info "This is a placeholder. Full implementation coming soon."
+
+    # TODO: implement package resolution and installation
+    for pkg in "$@"; do
+        case "$pkg" in
+            -h|--help) usage; exit 0 ;;
+            --native|--nix|--aur|-y|--yes) ;; # TODO: parse flags
+            *)
+                ui_info "Requested package: $pkg"
+                ;;
+        esac
+    done
+}
+
+main "$@"

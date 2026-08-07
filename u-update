@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UI_VERSION="0.0.1-alpha"
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Error: library not found at $UI_LIB" >&2
+    echo "Please run the install script first." >&2
+    exit 1
+fi
+
+usage() {
+    cat <<EOF
+u-update $UI_VERSION
+
+Usage: u-update [OPTIONS]
+
+Options:
+  --system    Update only system packages (native PM)
+  --nix       Update only Nix packages
+  --aur       Update only AUR packages
+  -y, --yes   Assume yes to all prompts
+  -h, --help  Show this help message
+EOF
+}
+
+main() {
+    ui_info "u-update v$UI_VERSION (alpha)"
+    ui_info "This is a placeholder. Full implementation coming soon."
+
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            --system|--nix|--aur|-y|--yes)
+                ui_info "Flag recognized: $arg"
+                ;;
+            *)
+                ui_warn "Unknown argument: $arg"
+                ;;
+        esac
+    done
+
+    ui_info "Update flow: system -> nix -> aur (with critical package protection)"
+}
+
+main "$@"
