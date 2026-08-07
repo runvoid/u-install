@@ -1,121 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-if [[ -f "$UI_LIB" ]]; then
-    # shellcheck source=/dev/null
-    source "$UI_LIB"
-else
-    echo "Error: library not found at $UI_LIB" >&2
-    echo "Please run the install script first: ./install" >&2
-    exit 1
-fi
-
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
 ui_parse_config
-
-usage() {
-    cat <<EOF
+usage() { cat <<EOF
 u-update ${UI_VERSION}
 
 Usage: u-update [OPTIONS]
 
 Options:
-  --system    Update only system packages (native PM)
+  --system    Update only system packages
   --nix       Update only Nix packages
   --aur       Update only AUR packages
   -y, --yes   Assume yes to all prompts
   -h, --help  Show this help message
-
-Safety: system-critical packages (kernel, drivers, glibc, systemd)
-        are skipped in Nix and AUR layers.
 EOF
 }
-
 main() {
-    local do_system=0
-    local do_nix=0
-    local do_aur=0
-    local auto_yes=0
-
+    local do_system=0 do_nix=0 do_aur=0 auto_yes=0
     for arg in "$@"; do
-        case "$arg" in
-            -h|--help) usage; exit 0 ;;
-            --system) do_system=1 ;;
-            --nix) do_nix=1 ;;
-            --aur) do_aur=1 ;;
-            -y|--yes) auto_yes=1 ;;
-            -*) ui_warn "Unknown option: $arg" ;;
-        esac
+        case "$arg" in -h|--help) usage; exit 0 ;; --system) do_system=1 ;; --nix) do_nix=1 ;; --aur) do_aur=1 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; esac
     done
-
-    if [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 ]]; then
-        do_system=1
-        do_nix=1
-        do_aur=1
-    fi
-
+    [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 ]] && { do_system=1; do_nix=1; do_aur=1; }
     if [[ $do_system -eq 1 ]]; then
-        ui_info "=== System Update (native package manager) ==="
-        if ui_confirm "Update system packages? This includes kernel, drivers, and system libraries." "$auto_yes"; then
-            ui_native_update
-        else
-            ui_info "System update skipped."
-        fi
+        ui_info "=== System Update ==="
+        ui_confirm "Update system packages?" "$auto_yes" && ui_native_update || ui_info "Skipped"
     fi
-
     if [[ $do_nix -eq 1 ]]; then
         ui_info "=== Nix Update ==="
-        if ! ui_has_nix; then
-            ui_warn "Nix is not installed. Skipping Nix updates."
-        else
-            local nix_pkgs
-            nix_pkgs=$(nix-env -q 2>/dev/null || true)
-            if [[ -z "$nix_pkgs" ]]; then
-                ui_info "No Nix packages installed."
-            else
-                ui_info "Updating Nix channels..."
-                nix-channel --update
-                while IFS= read -r pkg; do
-                    [[ -z "$pkg" ]] && continue
-                    if ui_is_critical "$pkg"; then
-                        ui_warn "Skipping critical package in Nix: ${pkg}"
-                        continue
-                    fi
-                    ui_info "Updating Nix package: ${pkg}"
-                    ui_nix_update_pkg "$pkg" || ui_warn "Failed to update ${pkg} via Nix"
-                done <<< "$nix_pkgs"
-            fi
+        ui_has_nix || { ui_warn "Nix not installed"; }
+        if ui_has_nix; then
+            local nix_pkgs; nix_pkgs=$(nix-env -q 2>/dev/null || true)
+            [[ -z "$nix_pkgs" ]] && ui_info "No Nix packages"
+            nix-channel --update
+            while IFS= read -r pkg; do
+                [[ -z "$pkg" ]] && continue
+                ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
+                ui_info "Updating: ${pkg}"; ui_nix_update_pkg "$pkg" || ui_warn "Failed: ${pkg}"
+            done <<< "$nix_pkgs"
         fi
     fi
-
     if [[ $do_aur -eq 1 ]]; then
         ui_info "=== AUR Update ==="
-        if ! ui_is_arch; then
-            ui_info "Not an Arch-based system. Skipping AUR updates."
-        else
-            if [[ -d "${UI_AUR_DIR}" ]]; then
-                local found=0
-                for aur_path in "${UI_AUR_DIR}"/*; do
-                    [[ -d "$aur_path" ]] || continue
-                    found=1
-                    local pkg
-                    pkg=$(basename "$aur_path")
-                    if ui_is_critical "$pkg"; then
-                        ui_warn "Skipping critical package in AUR: ${pkg}"
-                        continue
-                    fi
-                    ui_aur_update "$pkg"
-                done
-                if [[ $found -eq 0 ]]; then
-                    ui_info "No AUR packages cached for update."
-                fi
-            else
-                ui_info "No AUR cache directory found."
-            fi
+        [[ "$(ui_detect_distro)" == "arch" ]] || { ui_info "Not Arch-based"; }
+        if [[ "$(ui_detect_distro)" == "arch" && -d "${UI_AUR_DIR}" ]]; then
+            local found=0
+            for p in "${UI_AUR_DIR}"/*; do
+                [[ -d "$p" ]] || continue; found=1
+                local pkg; pkg=$(basename "$p")
+                ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
+                ui_aur_update "$pkg"
+            done
+            [[ $found -eq 0 ]] && ui_info "No AUR packages cached"
         fi
     fi
-
     ui_ok "Update complete."
 }
-
 main "$@"

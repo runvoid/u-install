@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+ui_parse_config
+usage() { cat <<EOF
+u-search ${UI_VERSION}
+
+Usage: u-search [OPTIONS] <PACKAGE...>
+
+Options:
+  -h, --help  Show this help message
+EOF
+}
+main() {
+    local packages=()
+    for arg in "$@"; do [[ "$arg" == "-h" || "$arg" == "--help" ]] && { usage; exit 0; }; [[ "$arg" == -* ]] || packages+=("$arg"); done
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+    local distro; distro=$(ui_detect_distro)
+    for pkg in "${packages[@]}"; do
+        ui_info "Searching: ${pkg}"
+        printf "\n  %-10s %-20s %-15s %s\n" "SOURCE" "PACKAGE" "VERSION" "STATUS"
+        printf "  %-10s %-20s %-15s %s\n" "----------" "--------------------" "---------------" "----------"
+        # Native
+        local nv="" ns="not found"
+        if ui_native_search "$pkg" 2>/dev/null; then
+            nv="$(ui_native_search_version "$pkg")"
+            ns="available"
+        fi
+        printf "  %-10s %-20s %-15s %s\n" "native" "$pkg" "${nv:-""}" "$ns"
+        # Nix
+        local nxv="" nxs="not found"
+        if ui_has_nix && ui_nix_search "$pkg" 2>/dev/null; then
+            nxv="$(ui_nix_search_version "$pkg")"
+            nxs="available"
+        elif ! ui_has_nix; then
+            nxs="Nix not installed"
+        fi
+        printf "  %-10s %-20s %-15s %s\n" "nix" "$pkg" "${nxv:-""}" "$nxs"
+        # AUR
+        local av="" as="not found"
+        if [[ "$distro" == "arch" ]]; then
+            if ui_aur_search "$pkg" 2>/dev/null; then
+                av="$(ui_aur_search_version "$pkg")"
+                as="available"
+            fi
+        else
+            as="Arch only"
+        fi
+        printf "  %-10s %-20s %-15s %s\n" "aur" "$pkg" "${av:-""}" "$as"
+        printf "\n"
+    done
+}
+main "$@"

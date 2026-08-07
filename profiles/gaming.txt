@@ -1,0 +1,5 @@
+# gaming group
+steam --native
+discord --native
+lutris --native
+wine --native

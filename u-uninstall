@@ -1,20 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-if [[ -f "$UI_LIB" ]]; then
-    # shellcheck source=/dev/null
-    source "$UI_LIB"
-else
-    echo "Error: library not found at $UI_LIB" >&2
-    echo "Please run the install script first: ./install" >&2
-    exit 1
-fi
-
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
 ui_parse_config
-
-usage() {
-    cat <<EOF
+usage() { cat <<EOF
 u-uninstall ${UI_VERSION}
 
 Usage: u-uninstall [OPTIONS] <PACKAGE...>
@@ -24,80 +13,32 @@ Options:
   -h, --help  Show this help message
 EOF
 }
-
 main() {
-    local packages=()
-    local auto_yes=0
-
+    local packages=() auto_yes=0
     for arg in "$@"; do
-        case "$arg" in
-            -h|--help) usage; exit 0 ;;
-            -y|--yes) auto_yes=1 ;;
-            -*) ui_warn "Unknown option: $arg" ;;
-            *) packages+=("$arg") ;;
-        esac
+        case "$arg" in -h|--help) usage; exit 0 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
     done
-
-    if [[ ${#packages[@]} -eq 0 ]]; then
-        usage
-        exit 1
-    fi
-
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     for pkg in "${packages[@]}"; do
-        ui_info "Processing removal: ${pkg}"
-
-        local source
-        source=$(ui_db_get_source "$pkg")
-
-        if [[ -z "$source" ]]; then
-            ui_warn "Package '${pkg}' not in local database. Trying auto-detection..."
-            local distro
-            distro=$(ui_detect_distro)
+        ui_info "Removing: ${pkg}"
+        local src; src=$(ui_db_get_source "$pkg")
+        if [[ -z "$src" ]]; then
+            ui_warn "Not in DB. Auto-detecting..."
+            local distro; distro=$(ui_detect_distro)
             case "$distro" in
-                arch)
-                    pacman -Q "$pkg" >/dev/null 2>&1 && source="native"
-                    pacman -Qm "$pkg" >/dev/null 2>&1 && source="aur"
-                    ;;
-                debian)
-                    dpkg -l "$pkg" >/dev/null 2>&1 && source="native"
-                    ;;
-                fedora|yum)
-                    rpm -q "$pkg" >/dev/null 2>&1 && source="native"
-                    ;;
+                arch) pacman -Q "$pkg" >/dev/null 2>&1 && src="native"; pacman -Qm "$pkg" >/dev/null 2>&1 && src="aur" ;;
+                debian) dpkg -l "$pkg" >/dev/null 2>&1 && src="native" ;;
+                fedora|yum) rpm -q "$pkg" >/dev/null 2>&1 && src="native" ;;
             esac
-            if [[ -z "$source" ]] && ui_has_nix; then
-                nix-env -q "$pkg" >/dev/null 2>&1 && source="nix"
-            fi
+            [[ -z "$src" && $(ui_has_nix; nix-env -q "$pkg" >/dev/null 2>&1 && echo 1) ]] && src="nix"
         fi
-
-        if [[ -z "$source" ]]; then
-            ui_err "Package '${pkg}' not found. It may not be installed or was not installed via u-install."
-            continue
-        fi
-
-        ui_info "Detected source: ${source}"
-
-        case "$source" in
-            native)
-                if ui_confirm "Remove '${pkg}' via native package manager?" "$auto_yes"; then
-                    ui_native_uninstall "$pkg" && ui_db_remove "$pkg"
-                fi
-                ;;
-            nix)
-                if ui_confirm "Remove '${pkg}' via Nix?" "$auto_yes"; then
-                    ui_nix_uninstall "$pkg" && ui_db_remove "$pkg"
-                fi
-                ;;
-            aur)
-                if ui_confirm "Remove '${pkg}' via pacman (AUR)?" "$auto_yes"; then
-                    ui_aur_uninstall "$pkg" && ui_db_remove "$pkg"
-                fi
-                ;;
-            *)
-                ui_err "Unknown source '${source}' for package '${pkg}'."
-                ;;
+        [[ -z "$src" ]] && { ui_err "'${pkg}' not found"; continue; }
+        case "$src" in
+            native) ui_confirm "Remove via native?" "$auto_yes" && ui_native_uninstall "$pkg" && ui_db_remove "$pkg" ;;
+            nix)    ui_confirm "Remove via Nix?" "$auto_yes" && ui_nix_uninstall "$pkg" && ui_db_remove "$pkg" ;;
+            aur)    ui_confirm "Remove via pacman (AUR)?" "$auto_yes" && ui_aur_uninstall "$pkg" && ui_db_remove "$pkg" ;;
+            *)      ui_err "Unknown source: ${src}" ;;
         esac
     done
 }
-
 main "$@"

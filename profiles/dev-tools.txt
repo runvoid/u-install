@@ -1,0 +1,8 @@
+# dev-tools group
+neovim --nix
+ripgrep --nix
+fd --nix
+bat --nix
+git --native
+tree --native
+jq --native

@@ -1,79 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-if [[ -f "$UI_LIB" ]]; then
-    # shellcheck source=/dev/null
-    source "$UI_LIB"
-else
-    echo "Error: library not found at $UI_LIB" >&2
-    echo "Please run the install script first: ./install" >&2
-    exit 1
-fi
-
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
 ui_parse_config
-
 usage() {
     cat <<EOF
 u-install ${UI_VERSION}
 
 Usage: u-install [OPTIONS] <PACKAGE...>
+         u-install @<GROUP>
          u-install --profile <NAME>
 
 Options:
-  --native    Force native package manager
-  --nix       Force Nix
-  --aur       Force AUR (Arch-based only)
-  --profile   Install packages from a profile list
-  -y, --yes   Assume yes to all prompts
-  -h, --help  Show this help message
-
-Examples:
-  u-install neovim
-  u-install firefox --nix
-  u-install neovim-git --aur -y
-  u-install --profile dev
+  --native        Force native package manager
+  --nix           Force Nix
+  --aur           Force AUR (Arch-based only)
+  --profile       Install packages from a profile list
+  --self-update   Update u-install itself
+  -y, --yes       Assume yes to all prompts
+  -h, --help      Show this help message
 EOF
 }
-
 install_profile() {
-    local profile="$1"
-    local profile_file="${HOME}/.local/share/u-install/profiles/${profile}.txt"
-    if [[ ! -f "$profile_file" ]]; then
-        profile_file="${profile}"
-    fi
-    if [[ ! -f "$profile_file" ]]; then
-        ui_err "Profile not found: ${profile}"
-        ui_info "Searched: ~/.local/share/u-install/profiles/${profile}.txt"
-        return 1
-    fi
-    ui_info "Installing from profile: ${profile}"
+    local profile="$1" profile_file="${UI_DATA_DIR}/profiles/${profile}.txt"
+    [[ -f "$profile_file" ]] || { ui_err "Profile not found: ${profile}"; return 1; }
+    ui_info "Installing profile: ${profile}"
     while IFS= read -r line; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$line" ]] && continue
-        local pkg="$line"
-        local pflag=""
-        if [[ "$line" == *"--"* ]]; then
-            pkg="$(echo "$line" | awk '{print $1}')"
-            pflag="$(echo "$line" | awk '{print $2}')"
-        fi
-        ui_info "Profile: installing ${pkg} ${pflag}"
-        if [[ -n "$pflag" ]]; then
-            "$0" "$pflag" "$pkg" -y
-        else
-            "$0" "$pkg" -y
-        fi
+        local pkg="$line" pflag=""
+        [[ "$line" == *"--"* ]] && { pkg="$(echo "$line" | awk '{print $1}')"; pflag="$(echo "$line" | awk '{print $2}')"; }
+        [[ -n "$pflag" ]] && "${UI_BIN_DIR}/u-install" "$pflag" "$pkg" -y || "${UI_BIN_DIR}/u-install" "$pkg" -y
     done < "$profile_file"
 }
-
 main() {
-    local packages=()
-    local force_native=0
-    local force_nix=0
-    local force_aur=0
-    local auto_yes=0
-    local profile=""
-
+    local packages=() force_native=0 force_nix=0 force_aur=0 auto_yes=0 profile=""
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
@@ -81,153 +42,51 @@ main() {
             --nix) force_nix=1 ;;
             --aur) force_aur=1 ;;
             --profile) profile="__next__" ;;
+            --self-update) ui_self_update; exit 0 ;;
             -y|--yes) auto_yes=1 ;;
             -*) ui_warn "Unknown option: $arg" ;;
-            *)
-                if [[ "$profile" == "__next__" ]]; then
-                    profile="$arg"
-                else
-                    packages+=("$arg")
-                fi
-                ;;
+            *) [[ "$profile" == "__next__" ]] && profile="$arg" || packages+=("$arg") ;;
         esac
     done
-
-    if [[ -n "$profile" && "$profile" != "__next__" ]]; then
-        install_profile "$profile"
-        return 0
-    fi
-
-    if [[ ${#packages[@]} -eq 0 ]]; then
-        usage
-        exit 1
-    fi
-
-    local force_count=0
-    [[ $force_native -eq 1 ]] && ((force_count++))
-    [[ $force_nix -eq 1 ]] && ((force_count++))
-    [[ $force_aur -eq 1 ]] && ((force_count++))
-    if [[ $force_count -gt 1 ]]; then
-        ui_err "Only one of --native, --nix, --aur can be used at a time."
-        exit 1
-    fi
-
-    local distro
-    distro=$(ui_detect_distro)
-    ui_info "Distribution detected: ${distro}"
-
+    [[ -n "$profile" && "$profile" != "__next__" ]] && { install_profile "$profile"; return 0; }
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+    local fc=0; [[ $force_native -eq 1 ]] && ((fc++)); [[ $force_nix -eq 1 ]] && ((fc++)); [[ $force_aur -eq 1 ]] && ((fc++))
+    [[ $fc -gt 1 ]] && { ui_err "Only one of --native, --nix, --aur"; exit 1; }
+    local distro; distro=$(ui_detect_distro)
+    ui_info "Distribution: ${distro}"
     for pkg in "${packages[@]}"; do
-        ui_info "Processing package: ${pkg}"
-
-        local existing_source
-        existing_source=$(ui_db_get_source "$pkg")
-        if [[ -n "$existing_source" ]]; then
-            ui_warn "Package '${pkg}' was previously installed via ${existing_source}."
-            if ! ui_confirm "Reinstall?" "$auto_yes"; then
-                continue
-            fi
-        fi
-
+        if [[ "$pkg" == @* ]]; then ui_install_group "${pkg#@}"; continue; fi
+        ui_info "Processing: ${pkg}"
+        local esrc; esrc=$(ui_db_get_source "$pkg")
+        [[ -n "$esrc" ]] && { ui_warn "Previously installed via ${esrc}"; ui_confirm "Reinstall?" "$auto_yes" || continue; }
         local installed=0
-
         if [[ $force_native -eq 1 ]]; then
-            if ui_native_search "$pkg"; then
-                if ui_confirm "Install '${pkg}' via native package manager?" "$auto_yes"; then
-                    ui_native_install "$pkg" && installed=1
-                fi
-            else
-                ui_err "Package '${pkg}' not found in native repositories."
-            fi
-            if [[ $installed -eq 1 ]]; then
-                ui_db_add "$pkg" "native"
-                ui_ok "'${pkg}' installed via native."
-            fi
-            continue
+            ui_native_search "$pkg" && { ui_confirm "Install via native?" "$auto_yes" && ui_native_install "$pkg" && installed=1; } || ui_err "Not found in native"
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; }; continue
         fi
-
         if [[ $force_nix -eq 1 ]]; then
-            if ui_nix_search "$pkg"; then
-                if ui_confirm "Install '${pkg}' via Nix?" "$auto_yes"; then
-                    ui_nix_install "$pkg" && installed=1
-                fi
-            else
-                ui_err "Package '${pkg}' not found in nixpkgs."
-            fi
-            if [[ $installed -eq 1 ]]; then
-                ui_db_add "$pkg" "nix"
-                ui_ok "'${pkg}' installed via Nix."
-            fi
-            continue
+            ui_nix_search "$pkg" && { ui_confirm "Install via Nix?" "$auto_yes" && ui_nix_install "$pkg" && installed=1; } || ui_err "Not found in nixpkgs"
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; }; continue
         fi
-
         if [[ $force_aur -eq 1 ]]; then
-            if ui_aur_search "$pkg"; then
-                if ui_confirm "Install '${pkg}' via AUR?" "$auto_yes"; then
-                    ui_aur_install "$pkg" && installed=1
-                fi
-            else
-                ui_err "Package '${pkg}' not found in AUR."
-            fi
-            if [[ $installed -eq 1 ]]; then
-                ui_db_add "$pkg" "aur"
-                ui_ok "'${pkg}' installed via AUR."
-            fi
-            continue
+            ui_aur_search "$pkg" && { ui_confirm "Install via AUR?" "$auto_yes" && ui_aur_install "$pkg" && installed=1; } || ui_err "Not found in AUR"
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "aur"; ui_ok "Installed via AUR"; }; continue
         fi
-
-        local try_native=1
-        local try_nix=1
-        local try_aur=1
-
-        case "$UI_PREFER_SOURCE" in
-            native) try_nix=0; try_aur=0 ;;
-            nix) try_native=0; try_aur=0 ;;
-            aur) try_native=0; try_nix=0 ;;
-        esac
-
-        if [[ $try_native -eq 1 ]]; then
-            if ui_native_search "$pkg"; then
-                if ui_confirm "Found in native repo. Install '${pkg}' via native PM?" "$auto_yes"; then
-                    ui_native_install "$pkg" && installed=1
-                    if [[ $installed -eq 1 ]]; then
-                        ui_db_add "$pkg" "native"
-                        ui_ok "'${pkg}' installed via native."
-                        continue
-                    fi
-                fi
-            fi
+        local try_native=1 try_nix=1 try_aur=1
+        case "$UI_PREFER_SOURCE" in native) try_nix=0; try_aur=0 ;; nix) try_native=0; try_aur=0 ;; aur) try_native=0; try_nix=0 ;; esac
+        if [[ $try_native -eq 1 ]] && ui_native_search "$pkg"; then
+            ui_confirm "Found in native. Install?" "$auto_yes" && ui_native_install "$pkg" && installed=1
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; continue; }
         fi
-
-        if [[ $try_nix -eq 1 ]]; then
-            if ui_nix_search "$pkg"; then
-                if ui_confirm "Not in native repo. Install '${pkg}' via Nix?" "$auto_yes"; then
-                    ui_nix_install "$pkg" && installed=1
-                    if [[ $installed -eq 1 ]]; then
-                        ui_db_add "$pkg" "nix"
-                        ui_ok "'${pkg}' installed via Nix."
-                        continue
-                    fi
-                fi
-            fi
+        if [[ $try_nix -eq 1 ]] && ui_nix_search "$pkg"; then
+            ui_confirm "Found in nixpkgs. Install?" "$auto_yes" && ui_nix_install "$pkg" && installed=1
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; continue; }
         fi
-
-        if [[ $try_aur -eq 1 && "$(ui_detect_distro)" == "arch" ]]; then
-            if ui_aur_search "$pkg"; then
-                if ui_confirm "Not in native repo or nixpkgs. Install '${pkg}' via AUR?" "$auto_yes"; then
-                    ui_aur_install "$pkg" && installed=1
-                    if [[ $installed -eq 1 ]]; then
-                        ui_db_add "$pkg" "aur"
-                        ui_ok "'${pkg}' installed via AUR."
-                        continue
-                    fi
-                fi
-            fi
+        if [[ $try_aur -eq 1 && "$distro" == "arch" ]] && ui_aur_search "$pkg"; then
+            ui_confirm "Found in AUR. Install?" "$auto_yes" && ui_aur_install "$pkg" && installed=1
+            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "aur"; ui_ok "Installed via AUR"; continue; }
         fi
-
-        if [[ $installed -eq 0 ]]; then
-            ui_err "Could not install '${pkg}'. Not found in any repository."
-        fi
+        [[ $installed -eq 0 ]] && ui_err "Could not install '${pkg}'"
     done
 }
-
 main "$@"
