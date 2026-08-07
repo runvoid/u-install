@@ -11,6 +11,8 @@ else
     exit 1
 fi
 
+ui_parse_config
+
 usage() {
     cat <<EOF
 u-uninstall ${UI_VERSION}
@@ -47,10 +49,8 @@ main() {
         local source
         source=$(ui_db_get_source "$pkg")
 
-        # Fallback detection if not in DB
         if [[ -z "$source" ]]; then
             ui_warn "Package '${pkg}' not in local database. Trying auto-detection..."
-            # Check native
             local distro
             distro=$(ui_detect_distro)
             case "$distro" in
@@ -61,11 +61,10 @@ main() {
                 debian)
                     dpkg -l "$pkg" >/dev/null 2>&1 && source="native"
                     ;;
-                fedora)
+                fedora|yum)
                     rpm -q "$pkg" >/dev/null 2>&1 && source="native"
                     ;;
             esac
-            # Check nix
             if [[ -z "$source" ]] && ui_has_nix; then
                 nix-env -q "$pkg" >/dev/null 2>&1 && source="nix"
             fi

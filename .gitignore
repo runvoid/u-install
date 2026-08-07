@@ -1,5 +1,4 @@
 # Local data
 *.log
-.cache/
 db/
 config/local

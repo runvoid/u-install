@@ -1,0 +1,10 @@
+# Example profile: development tools
+# Format: package [options]
+# Options: --native, --nix, --aur
+
+neovim --nix
+ripgrep --nix
+fd --nix
+bat --nix
+git --native
+base-devel --native

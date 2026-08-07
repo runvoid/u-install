@@ -11,6 +11,8 @@ else
     exit 1
 fi
 
+ui_parse_config
+
 usage() {
     cat <<EOF
 u-update ${UI_VERSION}
@@ -46,14 +48,12 @@ main() {
         esac
     done
 
-    # If no specific layer chosen, do all
     if [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 ]]; then
         do_system=1
         do_nix=1
         do_aur=1
     fi
 
-    # 1. System layer (native PM)
     if [[ $do_system -eq 1 ]]; then
         ui_info "=== System Update (native package manager) ==="
         if ui_confirm "Update system packages? This includes kernel, drivers, and system libraries." "$auto_yes"; then
@@ -63,19 +63,17 @@ main() {
         fi
     fi
 
-    # 2. Nix layer
     if [[ $do_nix -eq 1 ]]; then
         ui_info "=== Nix Update ==="
         if ! ui_has_nix; then
             ui_warn "Nix is not installed. Skipping Nix updates."
         else
-            # Get list of installed nix packages
             local nix_pkgs
             nix_pkgs=$(nix-env -q 2>/dev/null || true)
             if [[ -z "$nix_pkgs" ]]; then
                 ui_info "No Nix packages installed."
             else
-                ui_info "Checking Nix packages for updates..."
+                ui_info "Updating Nix channels..."
                 nix-channel --update
                 while IFS= read -r pkg; do
                     [[ -z "$pkg" ]] && continue
@@ -90,13 +88,11 @@ main() {
         fi
     fi
 
-    # 3. AUR layer
     if [[ $do_aur -eq 1 ]]; then
         ui_info "=== AUR Update ==="
         if ! ui_is_arch; then
             ui_info "Not an Arch-based system. Skipping AUR updates."
         else
-            # Iterate over AUR cache directories
             if [[ -d "${UI_AUR_DIR}" ]]; then
                 local found=0
                 for aur_path in "${UI_AUR_DIR}"/*; do

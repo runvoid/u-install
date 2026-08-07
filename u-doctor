@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    # shellcheck source=/dev/null
+    source "$UI_LIB"
+else
+    echo "Error: library not found at $UI_LIB" >&2
+    echo "Please run the install script first: ./install" >&2
+    exit 1
+fi
+
+ui_parse_config
+
+usage() {
+    cat <<EOF
+u-doctor ${UI_VERSION}
+
+Usage: u-doctor [OPTIONS]
+
+Options:
+  -h, --help  Show this help message
+EOF
+}
+
+main() {
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+        esac
+    done
+
+    ui_info "=== u-install Doctor ==="
+    local issues=0
+
+    printf "\n[Dependencies]\n"
+    for cmd in bash curl git; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            printf "  [OK] %s found\n" "$cmd"
+        else
+            printf "  [FAIL] %s missing\n" "$cmd"
+            ((issues++))
+        fi
+    done
+
+    if command -v sudo >/dev/null 2>&1 || command -v doas >/dev/null 2>&1; then
+        printf "  [OK] Privilege escalation (sudo/doas) available\n"
+    else
+        printf "  [WARN] Neither sudo nor doas found. System installs may fail.\n"
+        ((issues++))
+    fi
+
+    printf "\n[System]\n"
+    local distro
+    distro=$(ui_detect_distro)
+    printf "  Distribution: %s\n" "$distro"
+    if [[ "$distro" == "unknown" ]]; then
+        printf "  [WARN] Unknown distribution. Native PM features disabled.\n"
+        ((issues++))
+    fi
+
+    printf "\n[Nix]\n"
+    if ui_has_nix; then
+        printf "  [OK] Nix installed: %s\n" "$(nix-env --version 2>/dev/null || echo 'version unknown')"
+        printf "  [OK] Nix channel: %s\n" "$UI_NIX_CHANNEL"
+    else
+        printf "  [INFO] Nix not installed. Will be installed on first use.\n"
+    fi
+
+    printf "\n[AUR]\n"
+    if ui_is_arch; then
+        printf "  [OK] Arch-based system detected\n"
+        if command -v makepkg >/dev/null 2>&1; then
+            printf "  [OK] makepkg found\n"
+        else
+            printf "  [FAIL] makepkg missing. Install 'base-devel'.\n"
+            ((issues++))
+        fi
+        if command -v git >/dev/null 2>&1; then
+            printf "  [OK] git found\n"
+        else
+            printf "  [FAIL] git missing\n"
+            ((issues++))
+        fi
+    else
+        printf "  [INFO] Not Arch-based. AUR support disabled.\n"
+    fi
+
+    printf "\n[Directories]\n"
+    for dir in "$UI_CONFIG_DIR" "$UI_DATA_DIR"; do
+        if [[ -d "$dir" ]]; then
+            if [[ -w "$dir" ]]; then
+                printf "  [OK] %s (writable)\n" "$dir"
+            else
+                printf "  [FAIL] %s (not writable)\n" "$dir"
+                ((issues++))
+            fi
+        else
+            printf "  [INFO] %s does not exist yet\n" "$dir"
+        fi
+    done
+
+    printf "\n[Database]\n"
+    if [[ -f "$UI_DB" ]]; then
+        local count
+        count=$(ui_db_count)
+        printf "  [OK] Database found: %s packages tracked\n" "$count"
+    else
+        printf "  [INFO] Database not initialized yet\n"
+    fi
+
+    printf "\n[Config]\n"
+    if [[ -f "$UI_CONFIG_FILE" ]]; then
+        printf "  [OK] Config found: %s\n" "$UI_CONFIG_FILE"
+    else
+        printf "  [WARN] Config not found. Run install script to generate defaults.\n"
+        ((issues++))
+    fi
+
+    printf "\n[AUR Health]\n"
+    if ui_is_arch && [[ -d "${UI_AUR_DIR}" ]]; then
+        local outdated=0
+        for aur_path in "${UI_AUR_DIR}"/*; do
+            [[ -d "$aur_path" ]] || continue
+            local pkg
+            pkg=$(basename "$aur_path")
+            local status
+            status=$(ui_aur_check_updates "$pkg")
+            if [[ "$status" == "outdated" ]]; then
+                printf "  [WARN] AUR package outdated: %s\n" "$pkg"
+                ((outdated++))
+            fi
+        done
+        if [[ $outdated -eq 0 ]]; then
+            printf "  [OK] All cached AUR packages up to date\n"
+        else
+            printf "  [INFO] Run 'u-update --aur' to update %s package(s)\n" "$outdated"
+            ((issues++))
+        fi
+    fi
+
+    printf "\n[Conflicts]\n"
+    local conflicts=0
+    while IFS='|' read -r pkg source _date; do
+        [[ -z "$pkg" ]] && continue
+        local other_source=""
+        if [[ "$source" == "native" ]] && ui_has_nix && nix-env -q "$pkg" >/dev/null 2>&1; then
+            other_source="nix"
+        elif [[ "$source" == "nix" ]]; then
+            local distro
+            distro=$(ui_detect_distro)
+            case "$distro" in
+                arch) pacman -Q "$pkg" >/dev/null 2>&1 && other_source="native" ;;
+                debian) dpkg -l "$pkg" >/dev/null 2>&1 && other_source="native" ;;
+                fedora|yum) rpm -q "$pkg" >/dev/null 2>&1 && other_source="native" ;;
+            esac
+        fi
+        if [[ -n "$other_source" ]]; then
+            printf "  [WARN] '%s' installed via %s but also found in %s\n" "$pkg" "$source" "$other_source"
+            ((conflicts++))
+        fi
+    done < <(ui_db_list)
+    if [[ $conflicts -eq 0 ]]; then
+        printf "  [OK] No source conflicts detected\n"
+    fi
+
+    printf "\n[Summary]\n"
+    if [[ $issues -eq 0 ]]; then
+        ui_ok "No issues found. System is healthy."
+    else
+        ui_warn "%s issue(s) found. Review output above." "$issues"
+    fi
+}
+
+main "$@"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 UI_NAME="u-install"
-UI_VERSION="1.0.0"
+UI_VERSION="1.1.0"
 UI_BIN_DIR="${HOME}/.local/bin"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 
@@ -42,19 +42,31 @@ main() {
 
     mkdir -p "$UI_BIN_DIR"
     mkdir -p "${UI_DATA_DIR}/lib"
+    mkdir -p "${UI_DATA_DIR}/profiles"
+    mkdir -p "${HOME}/.config/u-install"
 
     cp -v "$src_dir/u-install" "$UI_BIN_DIR/u-install"
     cp -v "$src_dir/u-uninstall" "$UI_BIN_DIR/u-uninstall"
     cp -v "$src_dir/u-update" "$UI_BIN_DIR/u-update"
+    cp -v "$src_dir/u-stats" "$UI_BIN_DIR/u-stats"
+    cp -v "$src_dir/u-doctor" "$UI_BIN_DIR/u-doctor"
     cp -v "$src_dir/lib/u-install.sh" "${UI_DATA_DIR}/lib/u-install.sh"
+
+    if [[ ! -f "${HOME}/.config/u-install/u-install.conf" ]]; then
+        cp -v "$src_dir/config/u-install.conf" "${HOME}/.config/u-install/u-install.conf"
+        info "Default config installed to ~/.config/u-install/u-install.conf"
+    fi
+
+    cp -v "$src_dir/profiles/example.txt" "${UI_DATA_DIR}/profiles/example.txt"
 
     chmod +x "$UI_BIN_DIR/u-install"
     chmod +x "$UI_BIN_DIR/u-uninstall"
     chmod +x "$UI_BIN_DIR/u-update"
+    chmod +x "$UI_BIN_DIR/u-stats"
+    chmod +x "$UI_BIN_DIR/u-doctor"
 
     ok "Commands installed to ${UI_BIN_DIR}"
 
-    # Update PATH hint
     local shell_rc=""
     case "${SHELL##*/}" in
         bash) shell_rc="$HOME/.bashrc" ;;
