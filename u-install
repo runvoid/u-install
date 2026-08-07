@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UI_VERSION="0.0.1-alpha"
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-
 if [[ -f "$UI_LIB" ]]; then
+    # shellcheck source=/dev/null
     source "$UI_LIB"
 else
     echo "Error: library not found at $UI_LIB" >&2
-    echo "Please run the install script first." >&2
+    echo "Please run the install script first: ./install" >&2
     exit 1
 fi
 
 usage() {
     cat <<EOF
-u-install $UI_VERSION
+u-install ${UI_VERSION}
 
 Usage: u-install [OPTIONS] <PACKAGE...>
 
@@ -28,28 +27,153 @@ Options:
 Examples:
   u-install neovim
   u-install firefox --nix
-  u-install neovim-git --aur
+  u-install neovim-git --aur -y
 EOF
 }
 
 main() {
-    if [[ $# -eq 0 ]]; then
+    local packages=()
+    local force_native=0
+    local force_nix=0
+    local force_aur=0
+    local auto_yes=0
+
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            --native) force_native=1 ;;
+            --nix) force_nix=1 ;;
+            --aur) force_aur=1 ;;
+            -y|--yes) auto_yes=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
         usage
         exit 1
     fi
 
-    ui_info "u-install v$UI_VERSION (alpha)"
-    ui_info "This is a placeholder. Full implementation coming soon."
+    # Validate flags
+    local force_count=0
+    [[ $force_native -eq 1 ]] && ((force_count++))
+    [[ $force_nix -eq 1 ]] && ((force_count++))
+    [[ $force_aur -eq 1 ]] && ((force_count++))
+    if [[ $force_count -gt 1 ]]; then
+        ui_err "Only one of --native, --nix, --aur can be used at a time."
+        exit 1
+    fi
 
-    # TODO: implement package resolution and installation
-    for pkg in "$@"; do
-        case "$pkg" in
-            -h|--help) usage; exit 0 ;;
-            --native|--nix|--aur|-y|--yes) ;; # TODO: parse flags
-            *)
-                ui_info "Requested package: $pkg"
-                ;;
-        esac
+    local distro
+    distro=$(ui_detect_distro)
+    ui_info "Distribution detected: ${distro}"
+
+    for pkg in "${packages[@]}"; do
+        ui_info "Processing package: ${pkg}"
+
+        # Check if already installed via our DB
+        local existing_source
+        existing_source=$(ui_db_get_source "$pkg")
+        if [[ -n "$existing_source" ]]; then
+            ui_warn "Package '${pkg}' was previously installed via ${existing_source}."
+            if ! ui_confirm "Reinstall?" "$auto_yes"; then
+                continue
+            fi
+        fi
+
+        local installed=0
+
+        # Mode: force native
+        if [[ $force_native -eq 1 ]]; then
+            if ui_native_search "$pkg"; then
+                if ui_confirm "Install '${pkg}' via native package manager?" "$auto_yes"; then
+                    ui_native_install "$pkg" && installed=1
+                fi
+            else
+                ui_err "Package '${pkg}' not found in native repositories."
+            fi
+            if [[ $installed -eq 1 ]]; then
+                ui_db_add "$pkg" "native"
+                ui_ok "'${pkg}' installed via native."
+            fi
+            continue
+        fi
+
+        # Mode: force nix
+        if [[ $force_nix -eq 1 ]]; then
+            if ui_nix_search "$pkg"; then
+                if ui_confirm "Install '${pkg}' via Nix?" "$auto_yes"; then
+                    ui_nix_install "$pkg" && installed=1
+                fi
+            else
+                ui_err "Package '${pkg}' not found in nixpkgs."
+            fi
+            if [[ $installed -eq 1 ]]; then
+                ui_db_add "$pkg" "nix"
+                ui_ok "'${pkg}' installed via Nix."
+            fi
+            continue
+        fi
+
+        # Mode: force aur
+        if [[ $force_aur -eq 1 ]]; then
+            if ui_aur_search "$pkg"; then
+                if ui_confirm "Install '${pkg}' via AUR?" "$auto_yes"; then
+                    ui_aur_install "$pkg" && installed=1
+                fi
+            else
+                ui_err "Package '${pkg}' not found in AUR."
+            fi
+            if [[ $installed -eq 1 ]]; then
+                ui_db_add "$pkg" "aur"
+                ui_ok "'${pkg}' installed via AUR."
+            fi
+            continue
+        fi
+
+        # Auto mode: native -> nix -> aur
+        # 1. Try native
+        if ui_native_search "$pkg"; then
+            if ui_confirm "Found in native repo. Install '${pkg}' via native PM?" "$auto_yes"; then
+                ui_native_install "$pkg" && installed=1
+                if [[ $installed -eq 1 ]]; then
+                    ui_db_add "$pkg" "native"
+                    ui_ok "'${pkg}' installed via native."
+                    continue
+                fi
+            fi
+        fi
+
+        # 2. Try nix
+        if ui_nix_search "$pkg"; then
+            if ui_confirm "Not in native repo. Install '${pkg}' via Nix?" "$auto_yes"; then
+                ui_nix_install "$pkg" && installed=1
+                if [[ $installed -eq 1 ]]; then
+                    ui_db_add "$pkg" "nix"
+                    ui_ok "'${pkg}' installed via Nix."
+                    continue
+                fi
+            fi
+        fi
+
+        # 3. Try aur (arch only)
+        if ui_is_arch; then
+            if ui_aur_search "$pkg"; then
+                if ui_confirm "Not in native repo or nixpkgs. Install '${pkg}' via AUR?" "$auto_yes"; then
+                    ui_aur_install "$pkg" && installed=1
+                    if [[ $installed -eq 1 ]]; then
+                        ui_db_add "$pkg" "aur"
+                        ui_ok "'${pkg}' installed via AUR."
+                        continue
+                    fi
+                fi
+            fi
+        fi
+
+        if [[ $installed -eq 0 ]]; then
+            ui_err "Could not install '${pkg}'. Not found in any repository."
+        fi
     done
 }
 

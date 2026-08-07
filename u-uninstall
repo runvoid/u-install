@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UI_VERSION="0.0.1-alpha"
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-
 if [[ -f "$UI_LIB" ]]; then
+    # shellcheck source=/dev/null
     source "$UI_LIB"
 else
     echo "Error: library not found at $UI_LIB" >&2
-    echo "Please run the install script first." >&2
+    echo "Please run the install script first: ./install" >&2
     exit 1
 fi
 
 usage() {
     cat <<EOF
-u-uninstall $UI_VERSION
+u-uninstall ${UI_VERSION}
 
 Usage: u-uninstall [OPTIONS] <PACKAGE...>
 
@@ -25,20 +24,78 @@ EOF
 }
 
 main() {
-    if [[ $# -eq 0 ]]; then
+    local packages=()
+    local auto_yes=0
+
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -y|--yes) auto_yes=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
         usage
         exit 1
     fi
 
-    ui_info "u-uninstall v$UI_VERSION (alpha)"
-    ui_info "This is a placeholder. Full implementation coming soon."
+    for pkg in "${packages[@]}"; do
+        ui_info "Processing removal: ${pkg}"
 
-    for pkg in "$@"; do
-        case "$pkg" in
-            -h|--help) usage; exit 0 ;;
-            -y|--yes) ;; # TODO: parse flags
+        local source
+        source=$(ui_db_get_source "$pkg")
+
+        # Fallback detection if not in DB
+        if [[ -z "$source" ]]; then
+            ui_warn "Package '${pkg}' not in local database. Trying auto-detection..."
+            # Check native
+            local distro
+            distro=$(ui_detect_distro)
+            case "$distro" in
+                arch)
+                    pacman -Q "$pkg" >/dev/null 2>&1 && source="native"
+                    pacman -Qm "$pkg" >/dev/null 2>&1 && source="aur"
+                    ;;
+                debian)
+                    dpkg -l "$pkg" >/dev/null 2>&1 && source="native"
+                    ;;
+                fedora)
+                    rpm -q "$pkg" >/dev/null 2>&1 && source="native"
+                    ;;
+            esac
+            # Check nix
+            if [[ -z "$source" ]] && ui_has_nix; then
+                nix-env -q "$pkg" >/dev/null 2>&1 && source="nix"
+            fi
+        fi
+
+        if [[ -z "$source" ]]; then
+            ui_err "Package '${pkg}' not found. It may not be installed or was not installed via u-install."
+            continue
+        fi
+
+        ui_info "Detected source: ${source}"
+
+        case "$source" in
+            native)
+                if ui_confirm "Remove '${pkg}' via native package manager?" "$auto_yes"; then
+                    ui_native_uninstall "$pkg" && ui_db_remove "$pkg"
+                fi
+                ;;
+            nix)
+                if ui_confirm "Remove '${pkg}' via Nix?" "$auto_yes"; then
+                    ui_nix_uninstall "$pkg" && ui_db_remove "$pkg"
+                fi
+                ;;
+            aur)
+                if ui_confirm "Remove '${pkg}' via pacman (AUR)?" "$auto_yes"; then
+                    ui_aur_uninstall "$pkg" && ui_db_remove "$pkg"
+                fi
+                ;;
             *)
-                ui_info "Requested removal: $pkg"
+                ui_err "Unknown source '${source}' for package '${pkg}'."
                 ;;
         esac
     done

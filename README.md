@@ -2,29 +2,38 @@
 
 Universal package manager wrapper for Linux.
 
-Install software from native repositories, Nix, or AUR — with one command. No root required for user-space packages.
+Install software from native repositories, Nix, or AUR — with one command.
+User-space packages do not require root.
 
-## Installation
+## Quick Install
 
 ```bash
-git clone https://github.com/runvoid/u-install.git
+git clone https://github.com/YOUR_USERNAME/u-install.git
 cd u-install
 ./install
 ```
 
-Or directly:
+Then restart your terminal and use:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/runvoid/u-install/main/install | bash
+u-install neovim
+u-uninstall neovim
+u-update
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `u-install <package>` | Install a package from native repo, Nix, or AUR |
+| `u-install <package>` | Install from native repo, Nix, or AUR |
+| `u-install <package> --nix` | Force install via Nix |
+| `u-install <package> --aur` | Force install via AUR (Arch-based) |
+| `u-install <package> --native` | Force install via native PM |
 | `u-uninstall <package>` | Remove an installed package |
-| `u-update` | Update system and user packages safely |
+| `u-update` | Update system, Nix, and AUR packages safely |
+| `u-update --system` | Update only system packages |
+| `u-update --nix` | Update only Nix packages |
+| `u-update --aur` | Update only AUR packages |
 
 ## Supported Distributions
 
@@ -35,7 +44,13 @@ curl -fsSL https://raw.githubusercontent.com/runvoid/u-install/main/install | ba
 - **Alpine Linux** (apk + Nix)
 - **Any Linux** via Nix fallback
 
-## Structure
+## Safety
+
+- System-critical packages (kernel, bootloader, glibc, drivers, systemd) are updated **only** through the native package manager.
+- Nix installs are user-local (`~/.nix-profile`) and do not touch `/usr`.
+- AUR is supported only on Arch-based systems with `base-devel` installed.
+
+## Files
 
 ```
 u-install/
@@ -44,16 +59,10 @@ u-install/
 ├── u-uninstall      # Uninstall command
 ├── u-update         # Update command
 ├── lib/
-│   └── u-install.sh # Common functions
+│   └── u-install.sh # Common library
 ├── README.md
 └── LICENSE
 ```
-
-## Safety
-
-- System-critical packages (kernel, bootloader, drivers, glibc) are updated **only** through the native package manager.
-- User-space packages can be installed without root via Nix.
-- AUR is supported only on Arch-based systems.
 
 ## License
 
