@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# u-install common library v1.1.2
+# u-install common library v1.2.0
 # shellcheck shell=bash
 
 UI_NAME="u-install"
-UI_VERSION="1.1.2"
+UI_VERSION="1.2.0"
 UI_CONFIG_DIR="${HOME}/.config/u-install"
 UI_CONFIG_FILE="${UI_CONFIG_DIR}/u-install.conf"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 UI_DB="${UI_DATA_DIR}/db/installed"
 UI_AUR_DIR="${HOME}/.local/share/u-install/aur"
 UI_BIN_DIR="${HOME}/.local/bin"
+UI_EXPORT_FORMAT="u1"
 
 UI_PARALLEL_DOWNLOADS=3
 UI_AUTO_YES=0
@@ -44,6 +45,7 @@ ui_ok()    { [[ "$UI_LOG_LEVEL" =~ ^(debug|info)$ ]] && printf "${UI_GREEN}[${UI
 ui_warn()  { [[ "$UI_LOG_LEVEL" =~ ^(debug|info|warn)$ ]] && printf "${UI_YELLOW}[${UI_NAME}]${UI_NC} %s\n" "$1"; }
 ui_err()   { printf "${UI_RED}[${UI_NAME}]${UI_NC} %s\n" "$1" >&2; }
 ui_debug() { [[ "$UI_LOG_LEVEL" == "debug" ]] && printf "${UI_BLUE}[${UI_NAME}:debug]${UI_NC} %s\n" "$1"; }
+ui_print_version() { printf "%s %s\n" "$(basename "$0")" "$UI_VERSION"; }
 
 ui_parse_config() {
     if [[ -f "$UI_CONFIG_FILE" ]]; then
@@ -86,10 +88,10 @@ ui_db_remove() {
     grep -q "^${pkg}|" "$UI_DB" 2>/dev/null && { grep -v "^${pkg}|" "$UI_DB" > "${UI_DB}.tmp"; mv "${UI_DB}.tmp" "$UI_DB"; }
 }
 
-ui_db_get_source() { ui_ensure_db; grep "^${1}|" "$UI_DB" 2>/dev/null | tail -n1 | cut -d'|' -f2; }
+ui_db_get_source() { ui_ensure_db; grep "^${1}|" "$UI_DB" 2>/dev/null | tail -n1 | cut -d'|' -f2 || true; }
 ui_db_list()       { ui_ensure_db; cat "$UI_DB"; }
 ui_db_count()      { ui_ensure_db; wc -l < "$UI_DB" | tr -d ' '; }
-ui_db_count_by_source() { ui_ensure_db; grep "|${1}|" "$UI_DB" 2>/dev/null | wc -l | tr -d ' '; }
+ui_db_count_by_source() { ui_ensure_db; grep "|${1}|" "$UI_DB" 2>/dev/null | wc -l | tr -d ' ' || true; }
 
 ui_critical_packages=(
     linux linux-lts linux-zen linux-hardened linux-firmware
@@ -142,18 +144,25 @@ ui_nix_pkg_size() {
 ui_is_arch() { [[ "$(ui_detect_distro)" == "arch" ]]; }
 ui_has_aur_helper_deps() { command -v git >/dev/null 2>&1 && command -v makepkg >/dev/null 2>&1; }
 
+ui_aur_security_scan() {
+    local pkgbuild="$1"
+    [[ -f "$pkgbuild" ]] || return 0
+    grep -Eq 'curl.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && echo "pipes remote download to shell"
+    grep -Eq 'wget.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && echo "pipes remote download to shell"
+    grep -Eq 'rm -rf /($|[^/])' "$pkgbuild" 2>/dev/null && echo "dangerous rm -rf / pattern"
+    grep -Eq 'dd if=/dev/zero' "$pkgbuild" 2>/dev/null && echo "disk wiping command"
+    grep -Eq 'mkfs\.' "$pkgbuild" 2>/dev/null && echo "disk formatting command"
+    grep -Eq '> /dev/sd[a-z]' "$pkgbuild" 2>/dev/null && echo "writes to block device"
+    grep -Eq 'sudo ' "$pkgbuild" 2>/dev/null && echo "uses sudo in build"
+    return 0
+}
+
 ui_aur_security_check() {
     local pkgbuild="$1"
     [[ "$UI_AUR_SECURITY_CHECK" -eq 0 ]] && return 0
     [[ -f "$pkgbuild" ]] || return 0
     local issues=()
-    grep -Eq 'curl.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && issues+=("Pipes remote download to shell")
-    grep -Eq 'wget.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && issues+=("Pipes remote download to shell")
-    grep -Eq 'rm -rf /($|[^/])' "$pkgbuild" 2>/dev/null && issues+=("Dangerous rm -rf / pattern")
-    grep -Eq 'dd if=/dev/zero' "$pkgbuild" 2>/dev/null && issues+=("Disk wiping command")
-    grep -Eq 'mkfs\.' "$pkgbuild" 2>/dev/null && issues+=("Disk formatting command")
-    grep -Eq '> /dev/sd[a-z]' "$pkgbuild" 2>/dev/null && issues+=("Writes to block device")
-    grep -Eq 'sudo ' "$pkgbuild" 2>/dev/null && issues+=("Uses sudo inside build")
+    while IFS= read -r line; do [[ -n "$line" ]] && issues+=("$line"); done < <(ui_aur_security_scan "$pkgbuild")
     if [[ ${#issues[@]} -gt 0 ]]; then
         ui_warn "Security issues found in PKGBUILD:"
         for i in "${issues[@]}"; do ui_warn "  - $i"; done
@@ -323,6 +332,16 @@ ui_aur_search() { curl -sf "https://aur.archlinux.org/rpc/v5/info?arg[]=${1}" 2>
 
 ui_aur_search_version() { curl -sf "https://aur.archlinux.org/rpc/v5/info?arg[]=${1}" 2>/dev/null | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4; }
 
+ui_aur_info_json() { curl -sf "https://aur.archlinux.org/rpc/v5/info?arg[]=${1}" 2>/dev/null; }
+
+ui_json_str() { echo "$1" | grep -o "\"${2}\":\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
+
+ui_json_num() { echo "$1" | grep -o "\"${2}\":[0-9.]*" | head -1 | cut -d':' -f2; }
+
+ui_aur_pkgbuild_url() { echo "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=${1}"; }
+
+ui_aur_fetch_pkgbuild() { curl -sf "$(ui_aur_pkgbuild_url "$1")" -o "$2" 2>/dev/null; }
+
 ui_confirm() {
     local msg="$1" auto="${2:-}"
     [[ "$UI_AUTO_YES" -eq 1 || "$auto" == "1" ]] && return 0
@@ -332,10 +351,13 @@ ui_confirm() {
 
 ui_human_size() {
     local b="$1"
-    [[ "$b" -lt 1024 ]] && { echo "${b}B"; return; }
-    [[ "$b" -lt 1048576 ]] && { echo "$(echo "scale=1; $b/1024" | bc)KB"; return; }
-    [[ "$b" -lt 1073741824 ]] && { echo "$(echo "scale=1; $b/1048576" | bc)MB"; return; }
-    echo "$(echo "scale=1; $b/1073741824" | bc)GB"
+    awk -v b="$b" 'BEGIN {
+        split("B KB MB GB TB PB", u, " ")
+        i = 1
+        while (b >= 1024 && i < 6) { b /= 1024; i++ }
+        if (i == 1) printf "%d%s\n", b, u[i]
+        else printf "%.1f%s\n", b, u[i]
+    }'
 }
 
 ui_self_update() {
@@ -351,9 +373,12 @@ ui_self_update() {
     local extracted="${tmpdir}/u-install-${latest#v}"
     [[ -d "$extracted" ]] || { ui_err "Extraction failed"; rm -rf "$tmpdir"; return 1; }
     ui_info "Installing update..."
-    cp "${extracted}/u-install" "${extracted}/u-uninstall" "${extracted}/u-update" "${extracted}/u-stats" "${extracted}/u-doctor" "${extracted}/u-search" "${UI_BIN_DIR}/"
+    local tools=(u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import)
+    for t in "${tools[@]}"; do
+        cp "${extracted}/${t}" "${UI_BIN_DIR}/${t}"
+        chmod +x "${UI_BIN_DIR}/${t}"
+    done
     cp "${extracted}/lib/u-install.sh" "${UI_DATA_DIR}/lib/"
-    chmod +x "${UI_BIN_DIR}/u-install" "${UI_BIN_DIR}/u-uninstall" "${UI_BIN_DIR}/u-update" "${UI_BIN_DIR}/u-stats" "${UI_BIN_DIR}/u-doctor" "${UI_BIN_DIR}/u-search"
     rm -rf "$tmpdir"
     ui_ok "Updated to ${latest}. Restart your terminal."
 }
@@ -369,6 +394,68 @@ ui_install_group() {
         local pkg="$line" pflag=""
         [[ "$line" == *"--"* ]] && { pkg="$(echo "$line" | awk '{print $1}')"; pflag="$(echo "$line" | awk '{print $2}')"; }
         ui_info "Group: installing ${pkg} ${pflag}"
-        [[ -n "$pflag" ]] && "${UI_BIN_DIR}/u-install" "$pflag" "$pkg" -y || "${UI_BIN_DIR}/u-install" "$pkg" -y
+        if [[ -n "$pflag" ]]; then
+            "${UI_BIN_DIR}/u-install" "$pflag" "$pkg" -y || ui_warn "Group: failed to install ${pkg}"
+        else
+            "${UI_BIN_DIR}/u-install" "$pkg" -y || ui_warn "Group: failed to install ${pkg}"
+        fi
     done < "$profile_file"
+}
+
+# --- Configuration export / import (.u format) ---------------------------
+# A .u file is a portable snapshot of the installer configuration and the list
+# of tracked packages, so one machine can be reproduced on another with
+# `u-import`. The format is line-based and greppable (see UI_EXPORT_FORMAT).
+#
+#   # u-install export
+#   # format: u1
+#   [meta]      -> version / exported date / hostname (informational)
+#   [config]    -> installer options (key = value), applied to u-install.conf
+#   [packages]  -> "name|source" per line, reinstalled via u-install
+
+ui_export_write() {
+    ui_ensure_db
+    printf '# u-install export\n'
+    printf '# format: %s\n' "$UI_EXPORT_FORMAT"
+    printf '\n[meta]\n'
+    printf 'version=%s\n' "$UI_VERSION"
+    printf 'exported=%s\n' "$(date +%Y-%m-%d)"
+    printf 'hostname=%s\n' "${HOSTNAME:-unknown}"
+    printf '\n[config]\n'
+    if [[ -f "$UI_CONFIG_FILE" ]]; then
+        grep -E '^[[:alnum:]_]+[[:space:]]*=' "$UI_CONFIG_FILE" || true
+    fi
+    printf '\n[packages]\n'
+    while IFS='|' read -r pkg src _; do
+        [[ -z "$pkg" ]] && continue
+        printf '%s|%s\n' "$pkg" "$src"
+    done < <(ui_db_list)
+}
+
+ui_uf_format() {
+    grep -m1 '^# format:' "$1" 2>/dev/null | awk '{print $3}'
+}
+
+ui_uf_section() {
+    local file="$1" section="$2"
+    awk -v s="[$section]" '
+        $0 == s { inside = 1; next }
+        /^\[/   { inside = 0; next }
+        inside {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            sub(/[ \t]+$/, "", line)
+            if (line == "" || line ~ /^#/) next
+            print line
+        }
+    ' "$file"
+}
+
+ui_import_apply_config() {
+    local uf="$1" body
+    body="$(ui_uf_section "$uf" config)"
+    [[ -z "$body" ]] && return 1
+    ui_ensure_dirs
+    { printf '[options]\n'; printf '%s\n' "$body"; } > "$UI_CONFIG_FILE"
+    return 0
 }

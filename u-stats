@@ -9,11 +9,17 @@ u-stats ${UI_VERSION}
 Usage: u-stats [OPTIONS]
 
 Options:
+  -V, --version  Show version information
   -h, --help  Show this help message
 EOF
 }
 main() {
-    for arg in "$@"; do [[ "$arg" == "-h" || "$arg" == "--help" ]] && { usage; exit 0; }; done
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+        esac
+    done
     ui_info "=== Statistics ==="
     printf "  Total tracked:     %s\n" "$(ui_db_count)"
     printf "  Native packages:   %s\n" "$(ui_db_count_by_source "native")"

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+ui_parse_config
+usage() { cat <<EOF
+u-import ${UI_VERSION}
+
+Apply a .u file produced by \`u-export\`: restore the installer configuration
+and (re)install every package it lists. Use it to bring a fresh machine to the
+same state as an existing one.
+
+Usage: u-import [OPTIONS] <FILE>
+
+Options:
+  --config-only    Apply only the installer configuration
+  --packages-only  Install only the packages
+  -y, --yes        Assume yes to all prompts
+  -V, --version    Show version information
+  -h, --help       Show this help message
+EOF
+}
+main() {
+    local file="" auto_yes=0 do_config=1 do_pkgs=1
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -y|--yes) auto_yes=1 ;;
+            --config-only) do_pkgs=0 ;;
+            --packages-only) do_config=0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) file="$arg" ;;
+        esac
+    done
+    [[ -z "$file" ]] && { usage; exit 1; }
+    [[ -f "$file" ]] || { ui_err "File not found: $file"; exit 1; }
+
+    local fmt; fmt="$(ui_uf_format "$file")"
+    [[ "$fmt" == "$UI_EXPORT_FORMAT" ]] || { ui_err "Unsupported .u format: ${fmt:-none} (expected ${UI_EXPORT_FORMAT})"; exit 1; }
+
+    ui_info "Importing from: ${file}"
+
+    if [[ $do_config -eq 1 ]]; then
+        if ui_confirm "Apply installer configuration?" "$auto_yes"; then
+            if ui_import_apply_config "$file"; then
+                ui_ok "Configuration applied to ${UI_CONFIG_FILE}"
+            else
+                ui_warn "No [config] section found; keeping current configuration"
+            fi
+        fi
+    fi
+
+    if [[ $do_pkgs -eq 1 ]]; then
+        local count=0 fail=0
+        while IFS='|' read -r pkg src; do
+            [[ -z "$pkg" ]] && continue
+            count=$((count+1))
+            ui_info "Installing ${pkg}${src:+ (${src})}"
+            if [[ -n "$src" && "$src" != "$pkg" ]]; then
+                "${UI_BIN_DIR}/u-install" "--${src}" "$pkg" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
+            else
+                "${UI_BIN_DIR}/u-install" "$pkg" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
+            fi
+        done < <(ui_uf_section "$file" packages)
+        ui_ok "Processed ${count} package(s), ${fail} failed."
+    fi
+    ui_ok "Import complete."
+}
+main "$@"

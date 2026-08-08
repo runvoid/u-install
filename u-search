@@ -9,12 +9,13 @@ u-search ${UI_VERSION}
 Usage: u-search [OPTIONS] <PACKAGE...>
 
 Options:
+  -V, --version  Show version information
   -h, --help  Show this help message
 EOF
 }
 main() {
     local packages=()
-    for arg in "$@"; do [[ "$arg" == "-h" || "$arg" == "--help" ]] && { usage; exit 0; }; [[ "$arg" == -* ]] || packages+=("$arg"); done
+    for arg in "$@"; do [[ "$arg" == "-h" || "$arg" == "--help" ]] && { usage; exit 0; }; [[ "$arg" == "-V" || "$arg" == "--version" ]] && { ui_print_version; exit 0; }; [[ "$arg" == -* ]] || packages+=("$arg"); done
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     local distro; distro=$(ui_detect_distro)
     for pkg in "${packages[@]}"; do

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+ui_parse_config
+usage() { cat <<EOF
+u-peek ${UI_VERSION}
+
+Inspect AUR package metadata without cloning or building it.
+Helps you decide whether an AUR package is worth touching at all.
+
+Usage: u-peek [OPTIONS] <PACKAGE...>
+
+Options:
+  -V, --version  Show version information
+  -h, --help  Show this help message
+EOF
+}
+peek() {
+    local pkg="$1"
+    local json; json="$(ui_aur_info_json "$pkg" || true)"
+    if [[ -z "$json" ]] || ! echo "$json" | grep -q '"resultcount":[1-9]'; then
+        ui_err "AUR package not found: ${pkg}"
+        return 1
+    fi
+
+    local version maintainer desc last_mod votes pop ood
+    version="$(ui_json_str "$json" Version || true)"
+    maintainer="$(ui_json_str "$json" Maintainer || true)"
+    desc="$(ui_json_str "$json" Description || true)"
+    last_mod="$(ui_json_num "$json" LastModified || true)"
+    votes="$(ui_json_num "$json" NumVotes || true)"
+    pop="$(ui_json_num "$json" Popularity || true)"
+    ood="$(ui_json_num "$json" OutOfDate || true)"
+
+    local last_update="unknown"
+    [[ -n "$last_mod" ]] && last_update="$(date -d "@${last_mod}" +%Y-%m-%d 2>/dev/null || echo unknown)"
+    local pop_fmt="0.0"
+    [[ -n "$pop" ]] && pop_fmt="$(printf '%.1f' "$pop" 2>/dev/null || echo "$pop")"
+    local ood_str="no"
+    [[ -n "$ood" ]] && ood_str="yes (since $(date -d "@${ood}" +%Y-%m-%d 2>/dev/null || echo '?'))"
+
+    # Fetch raw PKGBUILD to measure size and scan for security flags (no clone/build)
+    local pb_size="unavailable" sec="unavailable"
+    local tmp; tmp="$(mktemp)"
+    if ui_aur_fetch_pkgbuild "$pkg" "$tmp"; then
+        local bytes; bytes="$(wc -c < "$tmp" | tr -d ' ')"
+        pb_size="$(ui_human_size "$bytes")"
+        local flags=()
+        while IFS= read -r line; do [[ -n "$line" ]] && flags+=("$line"); done < <(ui_aur_security_scan "$tmp")
+        local n=${#flags[@]}
+        if [[ $n -eq 0 ]]; then
+            sec="none"
+        else
+            local joined=""
+            for f in "${flags[@]}"; do [[ -n "$joined" ]] && joined="${joined}; ${f}" || joined="$f"; done
+            local word="warnings"; [[ $n -eq 1 ]] && word="warning"
+            sec="${n} ${word} (${joined})"
+        fi
+    fi
+    rm -f "$tmp"
+
+    ui_info "Peeking AUR: ${pkg}"
+    printf "  # Package:        %s\n" "$pkg"
+    printf "  # Version:        %s\n" "${version:-unknown}"
+    [[ -n "$desc" ]] && printf "  # Description:    %s\n" "$desc"
+    printf "  # Maintainer:     %s\n" "${maintainer:-none (orphaned)}"
+    printf "  # Last update:    %s\n" "$last_update"
+    printf "  # Votes:          %s\n" "${votes:-0}"
+    printf "  # Popularity:     %s%%\n" "$pop_fmt"
+    printf "  # Out of date:    %s\n" "$ood_str"
+    printf "  # PKGBUILD size:  %s\n" "$pb_size"
+    printf "  # Security flags: %s\n" "$sec"
+    printf "\n"
+}
+main() {
+    local packages=()
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+    command -v curl >/dev/null 2>&1 || { ui_err "curl is required"; exit 1; }
+    local rc=0
+    for pkg in "${packages[@]}"; do peek "$pkg" || rc=1; done
+    exit $rc
+}
+main "$@"

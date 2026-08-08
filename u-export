@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+ui_parse_config
+usage() { cat <<EOF
+u-export ${UI_VERSION}
+
+Export your u-install setup (installer config + tracked packages) to a
+portable .u file. Copy that file to another machine and run \`u-import\`
+to reproduce the same configuration and packages.
+
+Usage: u-export [FILE]
+
+Arguments:
+  FILE           Output file (default: configuration.u)
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local out="configuration.u"
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) out="$arg" ;;
+        esac
+    done
+    ui_export_write > "$out"
+    local n; n="$(ui_db_count)"
+    ui_ok "Exported configuration and ${n} package(s) to ${out}"
+    ui_info "Apply on another machine with: u-import ${out}"
+}
+main "$@"

@@ -13,13 +13,14 @@ Options:
   --nix       Update only Nix packages
   --aur       Update only AUR packages
   -y, --yes   Assume yes to all prompts
+  -V, --version  Show version information
   -h, --help  Show this help message
 EOF
 }
 main() {
     local do_system=0 do_nix=0 do_aur=0 auto_yes=0
     for arg in "$@"; do
-        case "$arg" in -h|--help) usage; exit 0 ;; --system) do_system=1 ;; --nix) do_nix=1 ;; --aur) do_aur=1 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; esac
+        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; --system) do_system=1 ;; --nix) do_nix=1 ;; --aur) do_aur=1 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; esac
     done
     [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 ]] && { do_system=1; do_nix=1; do_aur=1; }
     if [[ $do_system -eq 1 ]]; then

@@ -1,0 +1,10 @@
+# ShellCheck configuration for u-install
+# See: https://www.shellcheck.net/wiki/
+
+# The shared library is sourced at runtime from ~/.local/share/u-install/lib,
+# so ShellCheck can't follow the `source` path statically. Skip it.
+disable=SC1091
+
+# We intentionally embed color escape codes into printf format strings
+# (e.g. printf "${UI_CYAN}...") which is safe for our fixed, internal values.
+disable=SC2059

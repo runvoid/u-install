@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-UI_VERSION="1.1.2"
+UI_VERSION="1.2.0"
 UI_BIN_DIR="${HOME}/.local/bin"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 info() { printf "\033[0;34m[install]\033[0m %s\n" "$1"; }
@@ -13,22 +13,30 @@ for cmd in bash curl git; do
 done
 src_dir="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$UI_BIN_DIR" "${UI_DATA_DIR}/lib" "${UI_DATA_DIR}/profiles" "${HOME}/.config/u-install"
-for f in u-install u-uninstall u-update u-stats u-doctor u-search; do
+for f in u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import; do
     cp -v "$src_dir/$f" "$UI_BIN_DIR/$f"
 done
 cp -v "$src_dir/lib/u-install.sh" "${UI_DATA_DIR}/lib/"
 [[ ! -f "${HOME}/.config/u-install/u-install.conf" ]] && cp -v "$src_dir/config/u-install.conf" "${HOME}/.config/u-install/u-install.conf"
 cp -v "$src_dir/profiles/"*.txt "${UI_DATA_DIR}/profiles/"
 chmod +x "$UI_BIN_DIR"/u-*
+shell_name="${SHELL##*/}"
 shell_rc=""
-case "${SHELL##*/}" in
-    bash) shell_rc="$HOME/.bashrc" ;;
-    zsh)  shell_rc="$HOME/.zshrc" ;;
-    fish) shell_rc="$HOME/.config/fish/config.fish" ;;
-    *)    shell_rc="$HOME/.profile" ;;
+path_line=""
+case "$shell_name" in
+    bash) shell_rc="$HOME/.bashrc"; path_line="export PATH=\"$UI_BIN_DIR:\$PATH\"" ;;
+    zsh)  shell_rc="$HOME/.zshrc";  path_line="export PATH=\"$UI_BIN_DIR:\$PATH\"" ;;
+    fish) shell_rc="$HOME/.config/fish/config.fish"; path_line="fish_add_path $UI_BIN_DIR" ;;
+    *)    shell_rc="$HOME/.profile"; path_line="export PATH=\"$UI_BIN_DIR:\$PATH\"" ;;
 esac
-if [[ -n "$shell_rc" && -f "$shell_rc" && ! $(grep -q "$UI_BIN_DIR" "$shell_rc" 2>/dev/null) ]]; then
-    echo "export PATH=\"$UI_BIN_DIR:\$PATH\"" >> "$shell_rc"
+# Create the rc file if it doesn't exist yet (fresh systems may lack it),
+# so the PATH entry is actually picked up on the next login.
+mkdir -p "$(dirname "$shell_rc")"
+[[ -f "$shell_rc" ]] || touch "$shell_rc"
+if grep -qF "$UI_BIN_DIR" "$shell_rc" 2>/dev/null; then
+    info "PATH already configured in ${shell_rc}"
+else
+    printf '%s\n' "$path_line" >> "$shell_rc"
     ok "Added ${UI_BIN_DIR} to PATH in ${shell_rc}"
     warn "Restart your terminal or run: source ${shell_rc}"
 fi

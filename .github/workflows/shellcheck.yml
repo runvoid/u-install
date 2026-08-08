@@ -1,0 +1,23 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  shellcheck:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck
+        run: |
+          # Lint the installer, the shared library and every u-* command.
+          # Files use `#!/usr/bin/env bash`, so ShellCheck auto-detects bash.
+          shellcheck install lib/u-install.sh u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import

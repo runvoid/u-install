@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+ui_parse_config
+usage() { cat <<EOF
+u-list ${UI_VERSION}
+
+List packages tracked by u-install (from its database).
+
+Usage: u-list [OPTIONS]
+
+Options:
+  --native       Show only native packages
+  --nix          Show only Nix packages
+  --aur          Show only AUR packages
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local filter=""
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            --native) filter="native" ;;
+            --nix) filter="nix" ;;
+            --aur) filter="aur" ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+        esac
+    done
+    ui_info "=== Installed packages ==="
+    local total; total="$(ui_db_count)"
+    if [[ "$total" -eq 0 ]]; then
+        ui_info "No packages tracked yet."
+        return 0
+    fi
+    printf "\n  %-24s %-8s %s\n" "PACKAGE" "SOURCE" "DATE"
+    printf "  %-24s %-8s %s\n" "------------------------" "--------" "----------"
+    local shown=0
+    while IFS='|' read -r pkg src date; do
+        [[ -z "$pkg" ]] && continue
+        [[ -n "$filter" && "$src" != "$filter" ]] && continue
+        printf "  %-24s %-8s %s\n" "$pkg" "$src" "${date:-unknown}"
+        shown=$((shown+1))
+    done < <(ui_db_list)
+    printf "\n"
+    if [[ -n "$filter" ]]; then
+        ui_ok "${shown} ${filter} package(s)."
+    else
+        ui_ok "${shown} package(s) total."
+    fi
+}
+main "$@"

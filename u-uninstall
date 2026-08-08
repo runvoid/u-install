@@ -10,13 +10,14 @@ Usage: u-uninstall [OPTIONS] <PACKAGE...>
 
 Options:
   -y, --yes   Assume yes to all prompts
+  -V, --version  Show version information
   -h, --help  Show this help message
 EOF
 }
 main() {
     local packages=() auto_yes=0
     for arg in "$@"; do
-        case "$arg" in -h|--help) usage; exit 0 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
+        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
     done
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     for pkg in "${packages[@]}"; do
@@ -30,7 +31,7 @@ main() {
                 debian) dpkg -l "$pkg" >/dev/null 2>&1 && src="native" ;;
                 fedora|yum) rpm -q "$pkg" >/dev/null 2>&1 && src="native" ;;
             esac
-            [[ -z "$src" && $(ui_has_nix; nix-env -q "$pkg" >/dev/null 2>&1 && echo 1) ]] && src="nix"
+            if [[ -z "$src" ]] && ui_has_nix && nix-env -q "$pkg" >/dev/null 2>&1; then src="nix"; fi
         fi
         [[ -z "$src" ]] && { ui_err "'${pkg}' not found"; continue; }
         case "$src" in

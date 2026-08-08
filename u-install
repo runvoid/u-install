@@ -18,6 +18,7 @@ Options:
   --profile       Install packages from a profile list
   --self-update   Update u-install itself
   -y, --yes       Assume yes to all prompts
+  -V, --version   Show version information
   -h, --help      Show this help message
 EOF
 }
@@ -30,7 +31,11 @@ install_profile() {
         [[ -z "$line" ]] && continue
         local pkg="$line" pflag=""
         [[ "$line" == *"--"* ]] && { pkg="$(echo "$line" | awk '{print $1}')"; pflag="$(echo "$line" | awk '{print $2}')"; }
-        [[ -n "$pflag" ]] && "${UI_BIN_DIR}/u-install" "$pflag" "$pkg" -y || "${UI_BIN_DIR}/u-install" "$pkg" -y
+        if [[ -n "$pflag" ]]; then
+            "${UI_BIN_DIR}/u-install" "$pflag" "$pkg" -y || ui_warn "Profile: failed to install ${pkg}"
+        else
+            "${UI_BIN_DIR}/u-install" "$pkg" -y || ui_warn "Profile: failed to install ${pkg}"
+        fi
     done < "$profile_file"
 }
 main() {
@@ -38,6 +43,7 @@ main() {
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
             --native) force_native=1 ;;
             --nix) force_nix=1 ;;
             --aur) force_aur=1 ;;
@@ -45,12 +51,17 @@ main() {
             --self-update) ui_self_update; exit 0 ;;
             -y|--yes) auto_yes=1 ;;
             -*) ui_warn "Unknown option: $arg" ;;
-            *) [[ "$profile" == "__next__" ]] && profile="$arg" || packages+=("$arg") ;;
+            *)
+                if [[ "$profile" == "__next__" ]]; then profile="$arg"; else packages+=("$arg"); fi
+                ;;
         esac
     done
     [[ -n "$profile" && "$profile" != "__next__" ]] && { install_profile "$profile"; return 0; }
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
-    local fc=0; [[ $force_native -eq 1 ]] && ((fc++)); [[ $force_nix -eq 1 ]] && ((fc++)); [[ $force_aur -eq 1 ]] && ((fc++))
+    local fc=0
+    [[ $force_native -eq 1 ]] && fc=$((fc+1))
+    [[ $force_nix -eq 1 ]] && fc=$((fc+1))
+    [[ $force_aur -eq 1 ]] && fc=$((fc+1))
     [[ $fc -gt 1 ]] && { ui_err "Only one of --native, --nix, --aur"; exit 1; }
     local distro; distro=$(ui_detect_distro)
     ui_info "Distribution: ${distro}"
