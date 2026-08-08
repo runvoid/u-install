@@ -5,7 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - 2026-08-08
+
+Adds a top-level `u-help` entry point and makes `.u` snapshots reproducible
+(pinned versions + integrity checksum), on top of ShellCheck CI and Nix fixes.
+
+### Added
+- `u-help` — a top-level entry point that lists every `u-*` command with a
+  one-line description; installed and self-updated alongside the others.
+- **Reproducible `.u` snapshots (format `u2`)**: `u-export` now records the
+  installed version of each package (`name|source|version`) and `u-import`
+  reinstalls that exact version (best-effort; native package managers that
+  support pinning). Use `u-import --latest` to ignore the pins. Older `u1`
+  files are still accepted.
+- **Integrity checks for `.u` files**: `u-export` embeds a `sha256` of the
+  package list in `[meta]`, and `u-import` verifies it, refusing a tampered
+  file unless confirmed. Falls back gracefully when no hasher is available.
+- README: a version badge next to the ShellCheck badge.
+
+### Changed
+- Unified the `--help` output across all `u-*` commands (each now opens with a
+  short description and lists `-V`/`--version` and `-h`/`--help`).
+- `u-import` now exits non-zero if any package failed to install.
+
+### Fixed
+- `u-install`: auto-mode tried to **bootstrap Nix on every run** (even without
+  `--nix`) because `ui_nix_search` called `ui_ensure_nix`. Search now only
+  probes an already-installed Nix; the Nix installer runs solely for an
+  explicit `--nix` request.
+- `ui_ensure_nix`: preflight check for `xz`/`tar` with an actionable hint
+  instead of the cryptic `sh: you do not have 'xz' installed` failure that
+  left Nix half-installed.
+- ShellCheck compliance: added `|| exit` to the `cd` calls in the AUR build
+  subshells (SC2164), rewrote the library-load guard in every command to a
+  real `if/else` (SC2015), and annotated the cross-file `UI_*` globals
+  (SC2034); `.shellcheckrc` documents the intentionally-kept idioms.
 
 ## [1.2.0] - 2026-08-08
 

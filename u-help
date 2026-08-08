@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-help ${UI_VERSION}
+
+Top-level entry point for the u-install toolkit: lists every u-* command.
+Run any command with --help for its own options.
+
+Usage: u-help [OPTIONS]
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+        esac
+    done
+    printf "u-install %s - a universal package helper\n" "$UI_VERSION"
+    printf "\nCommands:\n"
+    printf "  %-12s %s\n" "u-install"   "Install packages (native / Nix / AUR, auto-detected)"
+    printf "  %-12s %s\n" "u-uninstall" "Remove packages tracked by u-install"
+    printf "  %-12s %s\n" "u-update"    "Update system, Nix and AUR packages"
+    printf "  %-12s %s\n" "u-search"    "Search a package across all sources"
+    printf "  %-12s %s\n" "u-list"      "List packages tracked in the local database"
+    printf "  %-12s %s\n" "u-peek"      "Inspect AUR package metadata without building it"
+    printf "  %-12s %s\n" "u-stats"     "Show statistics about tracked packages"
+    printf "  %-12s %s\n" "u-doctor"    "Diagnose the environment and configuration"
+    printf "  %-12s %s\n" "u-export"    "Export config + packages to a portable .u file"
+    printf "  %-12s %s\n" "u-import"    "Restore config + packages from a .u file"
+    printf "  %-12s %s\n" "u-help"      "Show this overview"
+    printf "\nRun 'COMMAND --help' for details, e.g. 'u-install --help'.\n"
+    printf "Config file: %s\n" "$UI_CONFIG_FILE"
+}
+main "$@"

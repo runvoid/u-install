@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
 ui_parse_config
 usage() {
     cat <<EOF
 u-install ${UI_VERSION}
+
+Install packages from the native package manager, Nix, or the AUR,
+auto-detecting the best available source.
 
 Usage: u-install [OPTIONS] <PACKAGE...>
          u-install @<GROUP>
@@ -67,17 +75,27 @@ main() {
     ui_info "Distribution: ${distro}"
     for pkg in "${packages[@]}"; do
         if [[ "$pkg" == @* ]]; then ui_install_group "${pkg#@}"; continue; fi
-        ui_info "Processing: ${pkg}"
+        # Optional exact-version pin, e.g. "htop=3.2.1" (used by u-import).
+        local pver=""
+        if [[ "$pkg" == *=* ]]; then pver="${pkg#*=}"; pkg="${pkg%%=*}"; fi
+        ui_info "Processing: ${pkg}${pver:+ @ ${pver}}"
         local esrc; esrc=$(ui_db_get_source "$pkg")
         [[ -n "$esrc" ]] && { ui_warn "Previously installed via ${esrc}"; ui_confirm "Reinstall?" "$auto_yes" || continue; }
         local installed=0
         if [[ $force_native -eq 1 ]]; then
-            ui_native_search "$pkg" && { ui_confirm "Install via native?" "$auto_yes" && ui_native_install "$pkg" && installed=1; } || ui_err "Not found in native"
+            ui_native_search "$pkg" && { ui_confirm "Install via native?" "$auto_yes" && ui_native_install "$pkg" "$pver" && installed=1; } || ui_err "Not found in native"
             [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; }; continue
         fi
         if [[ $force_nix -eq 1 ]]; then
-            ui_nix_search "$pkg" && { ui_confirm "Install via Nix?" "$auto_yes" && ui_nix_install "$pkg" && installed=1; } || ui_err "Not found in nixpkgs"
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; }; continue
+            if ui_ensure_nix; then
+                if ui_nix_search "$pkg"; then
+                    ui_confirm "Install via Nix?" "$auto_yes" && ui_nix_install "$pkg" && installed=1
+                    [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; }
+                else
+                    ui_err "Not found in nixpkgs"
+                fi
+            fi
+            continue
         fi
         if [[ $force_aur -eq 1 ]]; then
             ui_aur_search "$pkg" && { ui_confirm "Install via AUR?" "$auto_yes" && ui_aur_install "$pkg" && installed=1; } || ui_err "Not found in AUR"
@@ -86,7 +104,7 @@ main() {
         local try_native=1 try_nix=1 try_aur=1
         case "$UI_PREFER_SOURCE" in native) try_nix=0; try_aur=0 ;; nix) try_native=0; try_aur=0 ;; aur) try_native=0; try_nix=0 ;; esac
         if [[ $try_native -eq 1 ]] && ui_native_search "$pkg"; then
-            ui_confirm "Found in native. Install?" "$auto_yes" && ui_native_install "$pkg" && installed=1
+            ui_confirm "Found in native. Install?" "$auto_yes" && ui_native_install "$pkg" "$pver" && installed=1
             [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; continue; }
         fi
         if [[ $try_nix -eq 1 ]] && ui_nix_search "$pkg"; then

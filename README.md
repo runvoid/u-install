@@ -3,6 +3,7 @@
 Universal package manager wrapper for Linux.
 
 ![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)
+![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)
 
 ## Quick Install
 
@@ -32,6 +33,7 @@ cd u-install
 | `u-update` | Update system, Nix, AUR |
 | `u-stats` | Show statistics |
 | `u-doctor` | System health check |
+| `u-help` | Overview of every `u-*` command |
 
 Every command also supports `-V`/`--version` and `-h`/`--help`.
 
@@ -48,11 +50,15 @@ u-export configuration.u
 u-import configuration.u          # apply config and (re)install everything
 u-import --packages-only conf.u   # skip config, install packages only
 u-import --config-only conf.u     # only restore installer settings
+u-import --latest conf.u          # ignore pinned versions, take the latest
 ```
 
 A `.u` file is plain text with three sections — `[meta]`, `[config]` and
-`[packages]` (`name|source` per line) — so it is easy to read, diff and edit
-by hand.
+`[packages]` — so it is easy to read, diff and edit by hand. Each package line
+is `name|source|version`: `u-export` records the installed version so
+`u-import` can reproduce it exactly (best-effort, for native package managers;
+`--latest` opts out). `[meta]` also carries a `sha256` of the package list,
+which `u-import` verifies to catch a corrupt or tampered file.
 
 ## Development
 

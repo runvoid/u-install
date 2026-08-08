@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# u-install common library v1.2.0
+# u-install common library v1.2.1
 # shellcheck shell=bash
+# The UI_* config globals below are populated here and consumed by the sourcing
+# u-* command scripts, so ShellCheck can't see their cross-file use.
+# shellcheck disable=SC2034
 
 UI_NAME="u-install"
-UI_VERSION="1.2.0"
+UI_VERSION="1.2.1"
 UI_CONFIG_DIR="${HOME}/.config/u-install"
 UI_CONFIG_FILE="${UI_CONFIG_DIR}/u-install.conf"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 UI_DB="${UI_DATA_DIR}/db/installed"
 UI_AUR_DIR="${HOME}/.local/share/u-install/aur"
 UI_BIN_DIR="${HOME}/.local/bin"
-UI_EXPORT_FORMAT="u1"
+UI_EXPORT_FORMAT="u2"
 
 UI_PARALLEL_DOWNLOADS=3
 UI_AUTO_YES=0
@@ -120,6 +123,14 @@ ui_ensure_nix() {
     ui_has_nix && return 0
     ui_info "Nix not found. Installing Nix (single-user, no root required)..."
     command -v curl >/dev/null 2>&1 || { ui_err "curl is required"; return 1; }
+    local missing=()
+    command -v xz  >/dev/null 2>&1 || missing+=("xz")
+    command -v tar >/dev/null 2>&1 || missing+=("tar")
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        ui_err "Nix installer requires: ${missing[*]}"
+        ui_info "On Debian/Ubuntu: sudo apt-get install -y xz-utils tar"
+        return 1
+    fi
     curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
     [[ -f "${HOME}/.nix-profile/etc/profile.d/nix.sh" ]] && . "${HOME}/.nix-profile/etc/profile.d/nix.sh"
     ui_has_nix || { ui_err "Nix installation failed"; return 1; }
@@ -180,7 +191,7 @@ ui_aur_install() {
     ui_info "Cloning AUR package '${pkg}'..."
     git clone "https://aur.archlinux.org/${pkg}.git" "$aur_path" || { ui_err "Clone failed"; return 1; }
     [[ -f "${aur_path}/PKGBUILD" ]] && { ui_aur_security_check "${aur_path}/PKGBUILD" || { ui_confirm "Security issues detected. Continue?" || { rm -rf "$aur_path"; return 1; }; }; }
-    (cd "$aur_path"; makepkg --noconfirm -si)
+    (cd "$aur_path" || exit 1; makepkg --noconfirm -si)
     [[ "$UI_CLEANUP_AFTER_BUILD" -eq 1 ]] && rm -rf "$aur_path"
 }
 
@@ -189,7 +200,7 @@ ui_aur_uninstall() { command -v pacman >/dev/null 2>&1 || { ui_err "pacman requi
 ui_aur_update() {
     local pkg="$1" aur_path="${UI_AUR_DIR}/${pkg}"
     [[ -d "${aur_path}/.git" ]] || { ui_warn "AUR cache for '${pkg}' not found"; return 0; }
-    (cd "$aur_path"; git fetch origin; local_hash=$(git rev-parse HEAD); remote_hash=$(git rev-parse origin/HEAD)
+    (cd "$aur_path" || exit 1; git fetch origin; local_hash=$(git rev-parse HEAD); remote_hash=$(git rev-parse origin/HEAD)
     [[ "$local_hash" == "$remote_hash" ]] && { ui_info "AUR '${pkg}' is up to date"; return 0; }
     ui_info "Updating AUR '${pkg}'..."; git pull; makepkg --noconfirm -si)
     [[ "$UI_CLEANUP_AFTER_BUILD" -eq 1 ]] && rm -rf "$aur_path"
@@ -198,7 +209,7 @@ ui_aur_update() {
 ui_aur_check_updates() {
     local pkg="$1" aur_path="${UI_AUR_DIR}/${pkg}"
     [[ -d "${aur_path}/.git" ]] || { echo "unknown"; return; }
-    (cd "$aur_path"; git fetch origin >/dev/null 2>&1
+    (cd "$aur_path" || exit 1; git fetch origin >/dev/null 2>&1
     [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/HEAD)" ]] && echo "outdated" || echo "current")
 }
 
@@ -221,13 +232,16 @@ ui_detect_distro() {
     echo "unknown"
 }
 
+# Second argument is an optional exact version to pin. Only package managers
+# that support it use the pin; the rest warn and fall back to the latest.
 ui_native_install() {
-    local pkg="$1" distro; distro=$(ui_detect_distro)
+    local pkg="$1" ver="${2:-}" distro; distro=$(ui_detect_distro)
+    local spec="$pkg"
     case "$distro" in
-        arch)   ui_info "Installing '${pkg}' via pacman..."; sudo pacman -S --needed --noconfirm "$pkg" ;;
-        debian) ui_info "Installing '${pkg}' via apt..."; sudo apt-get install -y "$pkg" ;;
-        fedora|yum) if command -v dnf >/dev/null 2>&1; then ui_info "Installing '${pkg}' via dnf..."; sudo dnf install -y "$pkg"; else ui_info "Installing '${pkg}' via yum..."; sudo yum install -y "$pkg"; fi ;;
-        suse)   ui_info "Installing '${pkg}' via zypper..."; sudo zypper install -y "$pkg" ;;
+        arch)   [[ -n "$ver" ]] && ui_warn "pacman: version pinning unsupported; installing latest '${pkg}'"; ui_info "Installing '${pkg}' via pacman..."; sudo pacman -S --needed --noconfirm "$pkg" ;;
+        debian) [[ -n "$ver" ]] && spec="${pkg}=${ver}"; ui_info "Installing '${spec}' via apt..."; sudo apt-get install -y "$spec" ;;
+        fedora|yum) [[ -n "$ver" ]] && spec="${pkg}-${ver}"; if command -v dnf >/dev/null 2>&1; then ui_info "Installing '${spec}' via dnf..."; sudo dnf install -y "$spec"; else ui_info "Installing '${spec}' via yum..."; sudo yum install -y "$spec"; fi ;;
+        suse)   [[ -n "$ver" ]] && spec="${pkg}=${ver}"; ui_info "Installing '${spec}' via zypper..."; sudo zypper install -y "$spec" ;;
         alpine) ui_info "Installing '${pkg}' via apk..."; doas apk add "$pkg" || sudo apk add "$pkg" ;;
         void)   ui_info "Installing '${pkg}' via xbps..."; sudo xbps-install -y "$pkg" ;;
         gentoo) ui_info "Installing '${pkg}' via emerge..."; sudo emerge "$pkg" ;;
@@ -320,7 +334,9 @@ ui_native_search_version() {
     esac
 }
 
-ui_nix_search() { local pkg="$1"; ui_ensure_nix || return 1; nix-env -qaP --json "^${pkg}$" 2>/dev/null | grep -q "$pkg"; }
+# Search must only probe an already-installed Nix; it must never trigger the
+# Nix bootstrap (that is reserved for explicit installs via ui_ensure_nix).
+ui_nix_search() { local pkg="$1"; ui_has_nix || return 1; nix-env -qaP --json "^${pkg}$" 2>/dev/null | grep -q "$pkg"; }
 
 ui_nix_search_version() {
     local pkg="$1"
@@ -373,7 +389,7 @@ ui_self_update() {
     local extracted="${tmpdir}/u-install-${latest#v}"
     [[ -d "$extracted" ]] || { ui_err "Extraction failed"; rm -rf "$tmpdir"; return 1; }
     ui_info "Installing update..."
-    local tools=(u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import)
+    local tools=(u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import u-help)
     for t in "${tools[@]}"; do
         cp "${extracted}/${t}" "${UI_BIN_DIR}/${t}"
         chmod +x "${UI_BIN_DIR}/${t}"
@@ -408,10 +424,11 @@ ui_install_group() {
 # `u-import`. The format is line-based and greppable (see UI_EXPORT_FORMAT).
 #
 #   # u-install export
-#   # format: u1
-#   [meta]      -> version / exported date / hostname (informational)
-#   [config]    -> installer options (key = value), applied to u-install.conf
-#   [packages]  -> "name|source" per line, reinstalled via u-install
+#   # format: u2
+#   [meta]      -> version / exported date / hostname / sha256 (integrity)
+#   [config]      -> installer options (key = value), applied to u-install.conf
+#   [packages]    -> "name|source|version" per line, reinstalled via u-install
+#   [meta].sha256 -> checksum of the package list, verified on import
 
 ui_export_write() {
     ui_ensure_db
@@ -426,10 +443,68 @@ ui_export_write() {
         grep -E '^[[:alnum:]_]+[[:space:]]*=' "$UI_CONFIG_FILE" || true
     fi
     printf '\n[packages]\n'
+    local pkg src _ ver
     while IFS='|' read -r pkg src _; do
         [[ -z "$pkg" ]] && continue
-        printf '%s|%s\n' "$pkg" "$src"
+        ver="$(ui_installed_version "$pkg" "$src")"
+        printf '%s|%s|%s\n' "$pkg" "$src" "$ver"
     done < <(ui_db_list)
+}
+
+# Best-effort lookup of the currently-installed version of a package, used to
+# pin versions in exported .u files. Returns an empty string when unknown.
+ui_installed_version() {
+    local pkg="$1" src="$2" distro
+    case "$src" in
+        nix)
+            ui_has_nix || { echo ""; return 0; }
+            nix-env -q 2>/dev/null | grep -m1 -- "^${pkg}-" | sed "s/^${pkg}-//" || true
+            ;;
+        *)
+            distro="$(ui_detect_distro)"
+            case "$distro" in
+                arch)            pacman -Q "$pkg" 2>/dev/null | awk 'NR==1{print $2}' || true ;;
+                debian)          dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || true ;;
+                fedora|yum|suse) rpm -q --qf '%{VERSION}-%{RELEASE}' "$pkg" 2>/dev/null || true ;;
+                *)               echo "" ;;
+            esac
+            ;;
+    esac
+}
+
+# Pipe data in, get its sha256 hex digest out (empty if no hasher available).
+ui_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 | awk '{print $1}'
+    fi
+}
+
+# Insert (or refresh) a sha256 of the [packages] section into [meta]. The
+# checksum covers the package list only, so adding it to [meta] is stable.
+ui_uf_sign() {
+    local file="$1" sum tmp
+    sum="$(ui_uf_section "$file" packages | ui_sha256)"
+    [[ -z "$sum" ]] && return 0
+    tmp="$(mktemp)"
+    awk -v s="sha256=${sum}" '
+        /^sha256=/ { next }
+        { print }
+        $0 == "[meta]" && !ins { print s; ins=1 }
+    ' "$file" > "$tmp"
+    mv "$tmp" "$file"
+}
+
+# Verify a signed .u file. Returns 0 on match, 1 on mismatch, 2 when the file
+# is unsigned or no hasher is available (i.e. verification is not possible).
+ui_uf_verify() {
+    local file="$1" stored actual
+    stored="$(ui_uf_section "$file" meta | awk -F= '/^sha256=/{print $2}')"
+    [[ -z "$stored" ]] && return 2
+    command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || return 2
+    actual="$(ui_uf_section "$file" packages | ui_sha256)"
+    [[ "$stored" == "$actual" ]]
 }
 
 ui_uf_format() {

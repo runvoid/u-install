@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
 ui_parse_config
 usage() { cat <<EOF
 u-import ${UI_VERSION}
@@ -15,13 +20,14 @@ Usage: u-import [OPTIONS] <FILE>
 Options:
   --config-only    Apply only the installer configuration
   --packages-only  Install only the packages
+  --latest         Ignore pinned versions; install the latest available
   -y, --yes        Assume yes to all prompts
   -V, --version    Show version information
   -h, --help       Show this help message
 EOF
 }
 main() {
-    local file="" auto_yes=0 do_config=1 do_pkgs=1
+    local file="" auto_yes=0 do_config=1 do_pkgs=1 use_latest=0
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
@@ -29,6 +35,7 @@ main() {
             -y|--yes) auto_yes=1 ;;
             --config-only) do_pkgs=0 ;;
             --packages-only) do_config=0 ;;
+            --latest) use_latest=1 ;;
             -*) ui_warn "Unknown option: $arg" ;;
             *) file="$arg" ;;
         esac
@@ -36,8 +43,21 @@ main() {
     [[ -z "$file" ]] && { usage; exit 1; }
     [[ -f "$file" ]] || { ui_err "File not found: $file"; exit 1; }
 
+    # Accept the current format (u2) and the older u1 (no version column).
     local fmt; fmt="$(ui_uf_format "$file")"
-    [[ "$fmt" == "$UI_EXPORT_FORMAT" ]] || { ui_err "Unsupported .u format: ${fmt:-none} (expected ${UI_EXPORT_FORMAT})"; exit 1; }
+    case "$fmt" in
+        "$UI_EXPORT_FORMAT"|u1) ;;
+        *) ui_err "Unsupported .u format: ${fmt:-none} (expected ${UI_EXPORT_FORMAT})"; exit 1 ;;
+    esac
+
+    # Integrity check: refuse a tampered file unless the user overrides.
+    ui_uf_verify "$file"
+    case "$?" in
+        0) ui_ok "Integrity: sha256 checksum OK" ;;
+        2) ui_warn "Integrity: file is unsigned or no hasher available; skipping check" ;;
+        *) ui_err "Integrity: sha256 mismatch - the file may be corrupt or tampered with"
+           ui_confirm "Import anyway?" "$auto_yes" || exit 1 ;;
+    esac
 
     ui_info "Importing from: ${file}"
 
@@ -52,18 +72,30 @@ main() {
     fi
 
     if [[ $do_pkgs -eq 1 ]]; then
-        local count=0 fail=0
-        while IFS='|' read -r pkg src; do
+        local count=0 fail=0 target
+        while IFS='|' read -r pkg src ver; do
             [[ -z "$pkg" ]] && continue
             count=$((count+1))
-            ui_info "Installing ${pkg}${src:+ (${src})}"
+            # Pin the exact version when the file recorded one and the user
+            # did not ask for --latest. Version pinning is best-effort and
+            # only wired up for native package managers that support it.
+            target="$pkg"
+            if [[ $use_latest -eq 0 && -n "$ver" ]]; then
+                if [[ -z "$src" || "$src" == "native" ]]; then
+                    target="${pkg}=${ver}"
+                else
+                    ui_warn "${pkg}: version pinning not supported for '${src}', using latest"
+                fi
+            fi
+            ui_info "Installing ${pkg}${src:+ (${src})}${ver:+ @ ${ver}}"
             if [[ -n "$src" && "$src" != "$pkg" ]]; then
-                "${UI_BIN_DIR}/u-install" "--${src}" "$pkg" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
+                "${UI_BIN_DIR}/u-install" "--${src}" "$target" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
             else
-                "${UI_BIN_DIR}/u-install" "$pkg" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
+                "${UI_BIN_DIR}/u-install" "$target" -y || { ui_warn "Failed: ${pkg}"; fail=$((fail+1)); }
             fi
         done < <(ui_uf_section "$file" packages)
         ui_ok "Processed ${count} package(s), ${fail} failed."
+        [[ $fail -gt 0 ]] && exit 1
     fi
     ui_ok "Import complete."
 }

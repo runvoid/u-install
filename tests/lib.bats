@@ -73,15 +73,35 @@ load test_helper
   ui_db_add neovim native
   ui_db_add firefox nix
   uf="${BATS_TEST_TMPDIR}/configuration.u"
-  ui_export_write > "$uf"
-  run ui_uf_format "$uf"
-  [ "$output" = "u1" ]
-  run ui_uf_section "$uf" packages
-  [ "${lines[0]}" = "neovim|native" ]
-  [ "${lines[1]}" = "firefox|nix" ]
-  run ui_uf_section "$uf" config
-  [ "$output" = "prefer_source = auto" ]
+    ui_export_write > "$uf"
+    run ui_uf_format "$uf"
+    [ "$output" = "u2" ]
+    run ui_uf_section "$uf" packages
+    # Format is u2: "name|source|version"; versions are empty here because the
+    # packages are not actually installed in the test's temporary HOME.
+    [ "${lines[0]}" = "neovim|native|" ]
+    [ "${lines[1]}" = "firefox|nix|" ]
+    run ui_uf_section "$uf" config
+    [ "$output" = "prefer_source = auto" ]
 }
+
+@test "ui_uf_sign then ui_uf_verify detects tampering" {
+    if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+        skip "no sha256 hasher available"
+    fi
+    ui_db_add neovim native
+    uf="${BATS_TEST_TMPDIR}/signed.u"
+    ui_export_write > "$uf"
+    ui_uf_sign "$uf"
+    grep -q '^sha256=' "$uf"
+    run ui_uf_verify "$uf"
+    [ "$status" -eq 0 ]
+    # Tamper with the package list; the stored checksum must no longer match.
+    printf 'evil|native|\n' >> "$uf"
+    run ui_uf_verify "$uf"
+    [ "$status" -eq 1 ]
+}
+
 
 @test "ui_import_apply_config rewrites the options file" {
   uf="${BATS_TEST_TMPDIR}/in.u"

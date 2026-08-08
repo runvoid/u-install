@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
 ui_parse_config
 usage() { cat <<EOF
 u-export ${UI_VERSION}
@@ -31,8 +36,14 @@ main() {
         esac
     done
     ui_export_write > "$out"
+    ui_uf_sign "$out"
     local n; n="$(ui_db_count)"
     ui_ok "Exported configuration and ${n} package(s) to ${out}"
+    if ui_uf_verify "$out"; then
+        ui_info "Integrity: sha256 checksum embedded in [meta]"
+    else
+        ui_warn "Integrity: no sha256 hasher found; file left unsigned"
+    fi
     ui_info "Apply on another machine with: u-import ${out}"
 }
 main "$@"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-UI_VERSION="1.2.0"
+UI_VERSION="1.2.1"
 UI_BIN_DIR="${HOME}/.local/bin"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 info() { printf "\033[0;34m[install]\033[0m %s\n" "$1"; }
@@ -13,7 +13,7 @@ for cmd in bash curl git; do
 done
 src_dir="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$UI_BIN_DIR" "${UI_DATA_DIR}/lib" "${UI_DATA_DIR}/profiles" "${HOME}/.config/u-install"
-for f in u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import; do
+for f in u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import u-help; do
     cp -v "$src_dir/$f" "$UI_BIN_DIR/$f"
 done
 cp -v "$src_dir/lib/u-install.sh" "${UI_DATA_DIR}/lib/"

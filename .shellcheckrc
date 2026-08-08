@@ -8,3 +8,10 @@ disable=SC1091
 # We intentionally embed color escape codes into printf format strings
 # (e.g. printf "${UI_CYAN}...") which is safe for our fixed, internal values.
 disable=SC2059
+
+# The codebase deliberately uses the compact `A && B || C` idiom in many spots
+# (with C as an error/fallback branch). It is reviewed and correct here, so
+# silence the "this is not an if-then-else" heuristic project-wide.
+disable=SC2015
+
+

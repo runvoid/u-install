@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
-[[ -f "$UI_LIB" ]] && source "$UI_LIB" || { echo "Run ./install first" >&2; exit 1; }
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
 ui_parse_config
 usage() { cat <<EOF
 u-peek ${UI_VERSION}
