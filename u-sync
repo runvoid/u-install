@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-sync ${UI_VERSION}
+
+Synchronize the current machine's packages with a .u snapshot file.
+Installs missing packages and optionally removes extras.
+
+Usage: u-sync [OPTIONS] <FILE.u>
+
+Options:
+  -y, --yes      Assume yes to all prompts
+  --dry-run      Show what would be synced without making changes
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local file="" auto_yes=0 dry_run=0
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -y|--yes) auto_yes=1 ;;
+            --dry-run) dry_run=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) file="$arg" ;;
+        esac
+    done
+    [[ -z "$file" ]] && { usage; exit 1; }
+    [[ -f "$file" ]] || { ui_err "File not found: $file"; exit 1; }
+
+    local fmt; fmt="$(ui_uf_format "$file")"
+    case "$fmt" in
+        "$UI_EXPORT_FORMAT"|u1) ;;
+        *) ui_err "Unsupported .u format: ${fmt:-none}"; exit 1 ;;
+    esac
+
+    if [[ "$dry_run" -eq 1 ]]; then
+        ui_info "=== DRY RUN (no changes will be made) ==="
+    fi
+
+    ui_sync_u "$file" "$auto_yes"
+}
+main "$@"

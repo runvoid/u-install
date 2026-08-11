@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-info ${UI_VERSION}
+
+Show detailed information about a package tracked by u-install.
+
+Usage: u-info [OPTIONS] <PACKAGE...>
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local packages=()
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+
+    for pkg in "${packages[@]}"; do
+        printf "\n"
+        ui_info_pkg "$pkg" || true
+    done
+}
+main "$@"

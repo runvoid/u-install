@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# u-install common library v1.2.1
+# u-install common library v1.3.0
 # shellcheck shell=bash
-# The UI_* config globals below are populated here and consumed by the sourcing
-# u-* command scripts, so ShellCheck can't see their cross-file use.
 # shellcheck disable=SC2034
 
 UI_NAME="u-install"
-UI_VERSION="1.2.1"
+UI_VERSION="1.3.0"
 UI_CONFIG_DIR="${HOME}/.config/u-install"
 UI_CONFIG_FILE="${UI_CONFIG_DIR}/u-install.conf"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
@@ -14,6 +12,8 @@ UI_DB="${UI_DATA_DIR}/db/installed"
 UI_AUR_DIR="${HOME}/.local/share/u-install/aur"
 UI_BIN_DIR="${HOME}/.local/bin"
 UI_EXPORT_FORMAT="u2"
+UI_CACHE_DIR="${UI_DATA_DIR}/cache"
+UI_LAST_CHECK_FILE="${UI_DATA_DIR}/.last_update_check"
 
 UI_PARALLEL_DOWNLOADS=3
 UI_AUTO_YES=0
@@ -24,6 +24,8 @@ UI_MAX_AUR_PARALLEL=2
 UI_CLEANUP_AFTER_BUILD=0
 UI_NIX_CHANNEL="nixpkgs"
 UI_AUR_SECURITY_CHECK=1
+UI_AUTO_UPDATE_CHECK=1
+UI_UPDATE_CHECK_INTERVAL_DAYS=7
 
 ui_setup_colors() {
     if [[ -t 1 && "$UI_COLORS" -eq 1 ]]; then
@@ -69,13 +71,15 @@ ui_parse_config() {
                 cleanup_after_build) [[ "$value" == "true" ]] && UI_CLEANUP_AFTER_BUILD=1 || UI_CLEANUP_AFTER_BUILD=0 ;;
                 nix_channel) UI_NIX_CHANNEL="$value" ;;
                 aur_security_check) [[ "$value" == "true" ]] && UI_AUR_SECURITY_CHECK=1 || UI_AUR_SECURITY_CHECK=0 ;;
+                auto_update_check) [[ "$value" == "true" ]] && UI_AUTO_UPDATE_CHECK=1 || UI_AUTO_UPDATE_CHECK=0 ;;
+                update_check_interval_days) UI_UPDATE_CHECK_INTERVAL_DAYS="$value" ;;
             esac
         done < "$UI_CONFIG_FILE"
     fi
     ui_setup_colors
 }
 
-ui_ensure_dirs() { mkdir -p "${UI_DATA_DIR}/db" "${UI_AUR_DIR}" "${UI_CONFIG_DIR}"; }
+ui_ensure_dirs() { mkdir -p "${UI_DATA_DIR}/db" "${UI_AUR_DIR}" "${UI_CONFIG_DIR}" "${UI_CACHE_DIR}"; }
 ui_ensure_db()   { ui_ensure_dirs; [[ -f "$UI_DB" ]] || touch "$UI_DB"; }
 
 ui_db_add() {
@@ -155,9 +159,12 @@ ui_nix_pkg_size() {
 ui_is_arch() { [[ "$(ui_detect_distro)" == "arch" ]]; }
 ui_has_aur_helper_deps() { command -v git >/dev/null 2>&1 && command -v makepkg >/dev/null 2>&1; }
 
+# --- Enhanced AUR Security Scan (v1.3.0) ---
 ui_aur_security_scan() {
     local pkgbuild="$1"
     [[ -f "$pkgbuild" ]] || return 0
+
+    # Original checks
     grep -Eq 'curl.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && echo "pipes remote download to shell"
     grep -Eq 'wget.*\|.*(bash|sh|zsh)' "$pkgbuild" 2>/dev/null && echo "pipes remote download to shell"
     grep -Eq 'rm -rf /($|[^/])' "$pkgbuild" 2>/dev/null && echo "dangerous rm -rf / pattern"
@@ -165,6 +172,24 @@ ui_aur_security_scan() {
     grep -Eq 'mkfs\.' "$pkgbuild" 2>/dev/null && echo "disk formatting command"
     grep -Eq '> /dev/sd[a-z]' "$pkgbuild" 2>/dev/null && echo "writes to block device"
     grep -Eq 'sudo ' "$pkgbuild" 2>/dev/null && echo "uses sudo in build"
+
+    # New v1.3.0 checks
+    grep -Eq 'eval\s*\$?\(' "$pkgbuild" 2>/dev/null && echo "eval with command substitution"
+    grep -Eq 'eval\s*".*\$\(' "$pkgbuild" 2>/dev/null && echo "eval with embedded command substitution"
+    grep -Eq 'source\s*<\s*\(' "$pkgbuild" 2>/dev/null && echo "sources from process substitution"
+    grep -Eq 'source\s*\$\(' "$pkgbuild" 2>/dev/null && echo "sources from command substitution"
+    grep -Eq 'base64\s*-d.*\|' "$pkgbuild" 2>/dev/null && echo "base64 decode piped to shell"
+    grep -Eq 'base64\s*--decode.*\|' "$pkgbuild" 2>/dev/null && echo "base64 decode piped to shell"
+    grep -Eq 'python[0-9]?\s+-c' "$pkgbuild" 2>/dev/null && echo "inline python execution"
+    grep -Eq 'perl\s+-e' "$pkgbuild" 2>/dev/null && echo "inline perl execution"
+    grep -Eq 'ruby\s+-e' "$pkgbuild" 2>/dev/null && echo "inline ruby execution"
+    grep -Eq 'php\s+-r' "$pkgbuild" 2>/dev/null && echo "inline php execution"
+    grep -Eq 'curl.*-o-.*\|.*sh' "$pkgbuild" 2>/dev/null && echo "curl to stdout piped to shell"
+    grep -Eq 'wget.*-qO-.*\|.*sh' "$pkgbuild" 2>/dev/null && echo "wget to stdout piped to shell"
+    grep -Eq '\bsystem\s*\(' "$pkgbuild" 2>/dev/null && echo "system() call detected"
+    grep -Eq '\bexec\s+' "$pkgbuild" 2>/dev/null && echo "exec call detected"
+    grep -Eq 'curl.*\|.*bash' "$pkgbuild" 2>/dev/null && echo "curl piped to bash"
+    grep -Eq 'wget.*\|.*bash' "$pkgbuild" 2>/dev/null && echo "wget piped to bash"
     return 0
 }
 
@@ -214,6 +239,31 @@ ui_aur_check_updates() {
 }
 
 ui_detect_distro() {
+    # Check /etc/os-release first for accuracy
+    if [[ -f /etc/os-release ]]; then
+        local id id_like
+        id=$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+        id_like=$(grep '^ID_LIKE=' /etc/os-release | cut -d= -f2 | tr -d '"' || true)
+        case "$id" in
+            arch|manjaro|endeavouros|garuda|artix|arcolinux|blackarch|parabola|hyperbola|kaos|chakra|archlabs|obarun) echo "arch"; return ;;
+            debian|ubuntu|mint|pop|zorin|elementary|deepin|kali|parrot|raspbian|q4os|antix|mx|lubuntu|xubuntu|kubuntu|pardus) echo "debian"; return ;;
+            fedora|rhel|centos|rocky|almalinux|oracle|amazon|openeuler|eurolinux|miracle|springdale) echo "fedora"; return ;;
+            opensuse|suse) echo "suse"; return ;;
+            alpine) echo "alpine"; return ;;
+            void) echo "void"; return ;;
+            gentoo) echo "gentoo"; return ;;
+            solus) echo "solus"; return ;;
+            slackware) echo "slackware"; return ;;
+            nixos) echo "nixos"; return ;;
+        esac
+        case "$id_like" in
+            *arch*) echo "arch"; return ;;
+            *debian*) echo "debian"; return ;;
+            *fedora*|*rhel*) echo "fedora"; return ;;
+            *suse*) echo "suse"; return ;;
+        esac
+    fi
+    # Fallback to package manager detection
     command -v pacman  >/dev/null 2>&1 && { echo "arch"; return; }
     command -v apt-get >/dev/null 2>&1 && { echo "debian"; return; }
     command -v dnf     >/dev/null 2>&1 && { echo "fedora"; return; }
@@ -232,8 +282,6 @@ ui_detect_distro() {
     echo "unknown"
 }
 
-# Second argument is an optional exact version to pin. Only package managers
-# that support it use the pin; the rest warn and fall back to the latest.
 ui_native_install() {
     local pkg="$1" ver="${2:-}" distro; distro=$(ui_detect_distro)
     local spec="$pkg"
@@ -322,20 +370,18 @@ ui_native_search() {
 ui_native_search_version() {
     local pkg="$1" distro; distro=$(ui_detect_distro)
     case "$distro" in
-        arch)   pacman -Si "$pkg" 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}' | tr -d ' ' ;;
+        arch)   pacman -Si "$pkg" 2>/dev/null | awk -F': '/'^Version/{print $2; exit}' | tr -d ' ' ;;
         debian) apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/{print $2; exit}' ;;
-        fedora|yum) if command -v dnf >/dev/null 2>&1; then dnf info "$pkg" 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}' | tr -d ' '; else yum info "$pkg" 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}' | tr -d ' '; fi ;;
-        suse)   zypper info "$pkg" 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}' | tr -d ' ' ;;
+        fedora|yum) if command -v dnf >/dev/null 2>&1; then dnf info "$pkg" 2>/dev/null | awk -F': '/'^Version/{print $2; exit}' | tr -d ' '; else yum info "$pkg" 2>/dev/null | awk -F': '/'^Version/{print $2; exit}' | tr -d ' '; fi ;;
+        suse)   zypper info "$pkg" 2>/dev/null | awk -F': '/'^Version/{print $2; exit}' | tr -d ' ' ;;
         alpine) apk info "$pkg" 2>/dev/null | head -n1 | awk '{print $1}' | sed 's/.*-//' ;;
-        void)   xbps-query -R "$pkg" 2>/dev/null | awk -F': ' '/^pkgver/{print $2; exit}' | tr -d ' ' ;;
+        void)   xbps-query -R "$pkg" 2>/dev/null | awk -F': '/'^pkgver/{print $2; exit}' | tr -d ' ' ;;
         gentoo) emerge -s "^${pkg}$" 2>/dev/null | grep -m1 "${pkg}-" | sed 's/.*-//' | awk '{print $1}' ;;
-        solus)  eopkg info "$pkg" 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}' | tr -d ' ' ;;
+        solus)  eopkg info "$pkg" 2>/dev/null | awk -F': '/'^Version/{print $2; exit}' | tr -d ' ' ;;
         *)      echo "" ;;
     esac
 }
 
-# Search must only probe an already-installed Nix; it must never trigger the
-# Nix bootstrap (that is reserved for explicit installs via ui_ensure_nix).
 ui_nix_search() { local pkg="$1"; ui_has_nix || return 1; nix-env -qaP --json "^${pkg}$" 2>/dev/null | grep -q "$pkg"; }
 
 ui_nix_search_version() {
@@ -389,10 +435,12 @@ ui_self_update() {
     local extracted="${tmpdir}/u-install-${latest#v}"
     [[ -d "$extracted" ]] || { ui_err "Extraction failed"; rm -rf "$tmpdir"; return 1; }
     ui_info "Installing update..."
-    local tools=(u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import u-help)
+    local tools=(u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import u-help u-info u-diff u-sync)
     for t in "${tools[@]}"; do
-        cp "${extracted}/${t}" "${UI_BIN_DIR}/${t}"
-        chmod +x "${UI_BIN_DIR}/${t}"
+        if [[ -f "${extracted}/${t}" ]]; then
+            cp "${extracted}/${t}" "${UI_BIN_DIR}/${t}"
+            chmod +x "${UI_BIN_DIR}/${t}"
+        fi
     done
     cp "${extracted}/lib/u-install.sh" "${UI_DATA_DIR}/lib/"
     rm -rf "$tmpdir"
@@ -418,18 +466,211 @@ ui_install_group() {
     done < "$profile_file"
 }
 
-# --- Configuration export / import (.u format) ---------------------------
-# A .u file is a portable snapshot of the installer configuration and the list
-# of tracked packages, so one machine can be reproduced on another with
-# `u-import`. The format is line-based and greppable (see UI_EXPORT_FORMAT).
-#
-#   # u-install export
-#   # format: u2
-#   [meta]      -> version / exported date / hostname / sha256 (integrity)
-#   [config]      -> installer options (key = value), applied to u-install.conf
-#   [packages]    -> "name|source|version" per line, reinstalled via u-install
-#   [meta].sha256 -> checksum of the package list, verified on import
+# --- Dry-run helpers (v1.3.0) ---
+ui_dry_run_native() {
+    local pkg="$1" ver="${2:-}" distro; distro=$(ui_detect_distro)
+    case "$distro" in
+        arch)   echo "sudo pacman -S --needed --noconfirm $pkg" ;;
+        debian) [[ -n "$ver" ]] && echo "sudo apt-get install -y ${pkg}=${ver}" || echo "sudo apt-get install -y $pkg" ;;
+        fedora) echo "sudo dnf install -y $pkg" ;;
+        *)      echo "<unknown distro command>" ;;
+    esac
+}
 
+ui_dry_run_nix() { echo "nix-env -iA ${UI_NIX_CHANNEL}.$1"; }
+ui_dry_run_aur() { echo "git clone https://aur.archlinux.org/$1.git && makepkg -si"; }
+
+# --- u-info helper (v1.3.0) ---
+ui_info_pkg() {
+    local pkg="$1"
+    local src; src=$(ui_db_get_source "$pkg")
+    [[ -z "$src" ]] && { ui_err "'${pkg}' not tracked by u-install"; return 1; }
+
+    local ver="" size="" date=""
+    date=$(grep "^${pkg}|" "$UI_DB" 2>/dev/null | tail -n1 | cut -d'|' -f3)
+
+    case "$src" in
+        native)
+            local distro; distro=$(ui_detect_distro)
+            case "$distro" in
+                arch)   ver=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}') ;;
+                debian) ver=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null) ;;
+                fedora|yum|suse) ver=$(rpm -q --qf '%{VERSION}-%{RELEASE}' "$pkg" 2>/dev/null) ;;
+            esac
+            ;;
+        nix)
+            ver=$(nix-env -q 2>/dev/null | grep -m1 -- "^${pkg}-" | sed "s/^${pkg}-//" || true)
+            size=$(ui_nix_pkg_size "$pkg")
+            ;;
+        aur)
+            ver=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
+            ;;
+    esac
+
+    printf "  Package:  %s\n" "$pkg"
+    printf "  Source:   %s\n" "$src"
+    printf "  Version:  %s\n" "${ver:-unknown}"
+    printf "  Installed: %s\n" "${date:-unknown}"
+    [[ -n "$size" && "$size" != "0" ]] && printf "  Size:     %s\n" "$(ui_human_size "$size")"
+}
+
+# --- u-diff helper (v1.3.0) ---
+ui_diff_u() {
+    local f1="$1" f2="$2"
+    local pkgs1 pkgs2
+    pkgs1=$(ui_uf_section "$f1" packages | sort)
+    pkgs2=$(ui_uf_section "$f2" packages | sort)
+
+    printf "\n  %-24s %-8s %-15s %s\n" "PACKAGE" "SOURCE" "V1" "V2"
+    printf "  %-24s %-8s %-15s %s\n" "------------------------" "--------" "---------------" "---------------"
+
+    # Packages only in f1
+    while IFS='|' read -r pkg src ver; do
+        [[ -z "$pkg" ]] && continue
+        if ! echo "$pkgs2" | grep -q "^${pkg}|"; then
+            printf "  %-24s %-8s %-15s %s\n" "$pkg" "$src" "${ver:-latest}" "-removed-"
+        fi
+    done <<< "$pkgs1"
+
+    # Packages only in f2
+    while IFS='|' read -r pkg src ver; do
+        [[ -z "$pkg" ]] && continue
+        if ! echo "$pkgs1" | grep -q "^${pkg}|"; then
+            printf "  %-24s %-8s %-15s %s\n" "$pkg" "$src" "-missing-" "${ver:-latest}"
+        fi
+    done <<< "$pkgs2"
+
+    # Packages in both (version diff)
+    while IFS='|' read -r pkg src ver; do
+        [[ -z "$pkg" ]] && continue
+        local ver2; ver2=$(echo "$pkgs2" | grep "^${pkg}|" | cut -d'|' -f3)
+        if [[ -n "$ver2" && "$ver" != "$ver2" ]]; then
+            printf "  %-24s %-8s %-15s %s\n" "$pkg" "$src" "${ver:-latest}" "${ver2:-latest}"
+        fi
+    done <<< "$pkgs1"
+}
+
+# --- u-sync helper (v1.3.0) ---
+ui_sync_u() {
+    local uf="$1" auto_yes="${2:-0}"
+    local current_pkgs sync_pkgs missing=() extra=() count=0 fail=0
+
+    current_pkgs=$(ui_db_list | cut -d'|' -f1 | sort)
+    sync_pkgs=$(ui_uf_section "$uf" packages | cut -d'|' -f1 | sort)
+
+    # Find missing packages
+    while IFS='|' read -r pkg src ver; do
+        [[ -z "$pkg" ]] && continue
+        if ! echo "$current_pkgs" | grep -qx "$pkg"; then
+            missing+=("$pkg|$src|$ver")
+        fi
+    done < <(ui_uf_section "$uf" packages)
+
+    # Find extra packages
+    while IFS='|' read -r pkg src ver; do
+        [[ -z "$pkg" ]] && continue
+        if ! echo "$sync_pkgs" | grep -qx "$pkg"; then
+            extra+=("$pkg|$src")
+        fi
+    done < <(ui_db_list)
+
+    printf "\n  Sync analysis:\n"
+    printf "  Current packages: %s\n" "$(echo "$current_pkgs" | wc -l | tr -d ' ')"
+    printf "  Target packages:  %s\n" "$(echo "$sync_pkgs" | wc -l | tr -d ' ')"
+    printf "  Missing:          %s\n" "${#missing[@]}"
+    printf "  Extra:            %s\n" "${#extra[@]}"
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        printf "\n  Missing packages:\n"
+        for m in "${missing[@]}"; do
+            local p s v; IFS='|' read -r p s v <<< "$m"
+            printf "    + %s (%s)\n" "$p" "$s"
+        done
+        if ui_confirm "Install missing packages?" "$auto_yes"; then
+            for m in "${missing[@]}"; do
+                local p s v target; IFS='|' read -r p s v <<< "$m"
+                target="$p"
+                [[ -n "$v" ]] && target="${p}=${v}"
+                ui_info "Installing ${p}..."
+                if [[ -n "$s" ]]; then
+                    "${UI_BIN_DIR}/u-install" "--${s}" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
+                else
+                    "${UI_BIN_DIR}/u-install" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
+                fi
+                count=$((count+1))
+            done
+        fi
+    fi
+
+    if [[ ${#extra[@]} -gt 0 ]]; then
+        printf "\n  Extra packages (not in .u file):\n"
+        for e in "${extra[@]}"; do
+            local p s; IFS='|' read -r p s <<< "$e"
+            printf "    - %s (%s)\n" "$p" "$s"
+        done
+        if ui_confirm "Remove extra packages?" "$auto_yes"; then
+            for e in "${extra[@]}"; do
+                local p; IFS='|' read -r p _ <<< "$e"
+                ui_info "Removing ${p}..."
+                "${UI_BIN_DIR}/u-uninstall" "$p" -y || ui_warn "Failed to remove: ${p}"
+            done
+        fi
+    fi
+
+    ui_ok "Sync complete. Installed: ${count}, failed: ${fail}."
+}
+
+# --- Auto-update check (v1.3.0) ---
+ui_check_for_updates() {
+    [[ "$UI_AUTO_UPDATE_CHECK" -eq 0 ]] && return 0
+
+    local interval_sec=$((UI_UPDATE_CHECK_INTERVAL_DAYS * 86400))
+    local now; now=$(date +%s)
+
+    if [[ -f "$UI_LAST_CHECK_FILE" ]]; then
+        local last_check; last_check=$(cat "$UI_LAST_CHECK_FILE" 2>/dev/null || echo 0)
+        [[ "$((now - last_check))" -lt "$interval_sec" ]] && return 0
+    fi
+
+    echo "$now" > "$UI_LAST_CHECK_FILE"
+
+    local latest; latest=$(curl -sf --max-time 3 \
+        "https://api.github.com/repos/runvoid/u-install/releases/latest" 2>/dev/null \
+        | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4)
+
+    [[ -z "$latest" ]] && return 0
+    latest="${latest#v}"
+
+    if [[ "$latest" != "$UI_VERSION" ]]; then
+        ui_warn "Update available: u-install v${latest} (you have v${UI_VERSION})"
+        ui_info "Run: u-install --self-update"
+    fi
+}
+
+# --- Search cache (v1.3.0) ---
+ui_search_cached() {
+    local source="$1" pkg="$2"
+    local cache_file="${UI_CACHE_DIR}/${source}_${pkg}.cache"
+    local cache_ttl=3600  # 1 hour
+
+    if [[ -f "$cache_file" ]]; then
+        local age; age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)))
+        if [[ "$age" -lt "$cache_ttl" ]]; then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+ui_search_cache_write() {
+    local source="$1" pkg="$2" result="$3"
+    echo "$result" > "${UI_CACHE_DIR}/${source}_${pkg}.cache"
+}
+
+ui_clear_search_cache() { rm -rf "${UI_CACHE_DIR:?}"/*; }
+
+# --- Export / Import (.u format) ---
 ui_export_write() {
     ui_ensure_db
     printf '# u-install export\n'
@@ -451,8 +692,6 @@ ui_export_write() {
     done < <(ui_db_list)
 }
 
-# Best-effort lookup of the currently-installed version of a package, used to
-# pin versions in exported .u files. Returns an empty string when unknown.
 ui_installed_version() {
     local pkg="$1" src="$2" distro
     case "$src" in
@@ -472,7 +711,6 @@ ui_installed_version() {
     esac
 }
 
-# Pipe data in, get its sha256 hex digest out (empty if no hasher available).
 ui_sha256() {
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum | awk '{print $1}'
@@ -481,8 +719,6 @@ ui_sha256() {
     fi
 }
 
-# Insert (or refresh) a sha256 of the [packages] section into [meta]. The
-# checksum covers the package list only, so adding it to [meta] is stable.
 ui_uf_sign() {
     local file="$1" sum tmp
     sum="$(ui_uf_section "$file" packages | ui_sha256)"
@@ -496,8 +732,6 @@ ui_uf_sign() {
     mv "$tmp" "$file"
 }
 
-# Verify a signed .u file. Returns 0 on match, 1 on mismatch, 2 when the file
-# is unsigned or no hasher is available (i.e. verification is not possible).
 ui_uf_verify() {
     local file="$1" stored actual
     stored="$(ui_uf_section "$file" meta | awk -F= '/^sha256=/{print $2}')"

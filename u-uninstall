@@ -16,17 +16,20 @@ Remove packages tracked by u-install, using their recorded source.
 Usage: u-uninstall [OPTIONS] <PACKAGE...>
 
 Options:
-  -y, --yes   Assume yes to all prompts
+  -y, --yes      Assume yes to all prompts
+  --dry-run      Show what would be removed without making changes
   -V, --version  Show version information
-  -h, --help  Show this help message
+  -h, --help     Show this help message
 EOF
 }
 main() {
-    local packages=() auto_yes=0
+    local packages=() auto_yes=0 dry_run=0
     for arg in "$@"; do
-        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
+        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; -y|--yes) auto_yes=1 ;; --dry-run) dry_run=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
     done
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+    [[ "$dry_run" -eq 1 ]] && ui_info "=== DRY RUN (no changes will be made) ==="
+
     for pkg in "${packages[@]}"; do
         ui_info "Removing: ${pkg}"
         local src; src=$(ui_db_get_source "$pkg")
@@ -41,6 +44,12 @@ main() {
             if [[ -z "$src" ]] && ui_has_nix && nix-env -q "$pkg" >/dev/null 2>&1; then src="nix"; fi
         fi
         [[ -z "$src" ]] && { ui_err "'${pkg}' not found"; continue; }
+
+        if [[ "$dry_run" -eq 1 ]]; then
+            ui_info "[DRY-RUN] Would remove '${pkg}' via ${src}"
+            continue
+        fi
+
         case "$src" in
             native) ui_confirm "Remove via native?" "$auto_yes" && ui_native_uninstall "$pkg" && ui_db_remove "$pkg" ;;
             nix)    ui_confirm "Remove via Nix?" "$auto_yes" && ui_nix_uninstall "$pkg" && ui_db_remove "$pkg" ;;

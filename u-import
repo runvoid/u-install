@@ -43,14 +43,12 @@ main() {
     [[ -z "$file" ]] && { usage; exit 1; }
     [[ -f "$file" ]] || { ui_err "File not found: $file"; exit 1; }
 
-    # Accept the current format (u2) and the older u1 (no version column).
     local fmt; fmt="$(ui_uf_format "$file")"
     case "$fmt" in
         "$UI_EXPORT_FORMAT"|u1) ;;
         *) ui_err "Unsupported .u format: ${fmt:-none} (expected ${UI_EXPORT_FORMAT})"; exit 1 ;;
     esac
 
-    # Integrity check: refuse a tampered file unless the user overrides.
     ui_uf_verify "$file"
     case "$?" in
         0) ui_ok "Integrity: sha256 checksum OK" ;;
@@ -76,9 +74,6 @@ main() {
         while IFS='|' read -r pkg src ver; do
             [[ -z "$pkg" ]] && continue
             count=$((count+1))
-            # Pin the exact version when the file recorded one and the user
-            # did not ask for --latest. Version pinning is best-effort and
-            # only wired up for native package managers that support it.
             target="$pkg"
             if [[ $use_latest -eq 0 && -n "$ver" ]]; then
                 if [[ -z "$src" || "$src" == "native" ]]; then

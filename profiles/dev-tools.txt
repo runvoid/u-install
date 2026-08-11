@@ -1,8 +1,4 @@
-# dev-tools group
-neovim --nix
-ripgrep --nix
-fd --nix
-bat --nix
-git --native
-tree --native
-jq --native
+# Dev tools profile
+# neovim
+# git
+# htop

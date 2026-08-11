@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-diff ${UI_VERSION}
+
+Compare two .u snapshot files to see differences in packages and versions.
+
+Usage: u-diff [OPTIONS] <FILE1.u> <FILE2.u>
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local files=()
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) files+=("$arg") ;;
+        esac
+    done
+    [[ ${#files[@]} -ne 2 ]] && { usage; exit 1; }
+
+    local f1="${files[0]}" f2="${files[1]}"
+    [[ -f "$f1" ]] || { ui_err "File not found: $f1"; exit 1; }
+    [[ -f "$f2" ]] || { ui_err "File not found: $f2"; exit 1; }
+
+    ui_info "Comparing: $(basename "$f1") vs $(basename "$f2")"
+    ui_diff_u "$f1" "$f2"
+}
+main "$@"

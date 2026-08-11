@@ -11,43 +11,76 @@ ui_parse_config
 usage() { cat <<EOF
 u-update ${UI_VERSION}
 
-Update system packages, Nix packages and cached AUR builds.
+Update system packages, Nix packages, cached AUR builds, and u-install itself.
 
 Usage: u-update [OPTIONS]
 
 Options:
-  --system    Update only system packages
-  --nix       Update only Nix packages
-  --aur       Update only AUR packages
-  -y, --yes   Assume yes to all prompts
+  --system       Update only system packages
+  --nix          Update only Nix packages
+  --aur          Update only AUR packages
+  --self         Update only u-install itself
+  --dry-run      Show what would be updated without making changes
+  -y, --yes      Assume yes to all prompts
   -V, --version  Show version information
-  -h, --help  Show this help message
+  -h, --help     Show this help message
 EOF
 }
 main() {
-    local do_system=0 do_nix=0 do_aur=0 auto_yes=0
+    local do_system=0 do_nix=0 do_aur=0 do_self=0 auto_yes=0 dry_run=0
     for arg in "$@"; do
-        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; --system) do_system=1 ;; --nix) do_nix=1 ;; --aur) do_aur=1 ;; -y|--yes) auto_yes=1 ;; -*) ui_warn "Unknown: $arg" ;; esac
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            --system) do_system=1 ;;
+            --nix) do_nix=1 ;;
+            --aur) do_aur=1 ;;
+            --self) do_self=1 ;;
+            --dry-run) dry_run=1 ;;
+            -y|--yes) auto_yes=1 ;;
+            -*) ui_warn "Unknown: $arg" ;;
+        esac
     done
-    [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 ]] && { do_system=1; do_nix=1; do_aur=1; }
+    [[ $do_system -eq 0 && $do_nix -eq 0 && $do_aur -eq 0 && $do_self -eq 0 ]] && { do_system=1; do_nix=1; do_aur=1; do_self=1; }
+    [[ "$dry_run" -eq 1 ]] && ui_info "=== DRY RUN (no changes will be made) ==="
+
+    if [[ $do_self -eq 1 ]]; then
+        ui_info "=== u-install Self Update ==="
+        if [[ "$dry_run" -eq 1 ]]; then
+            ui_info "[DRY-RUN] Would check for u-install updates"
+        else
+            ui_self_update || ui_warn "Self-update failed or skipped"
+        fi
+    fi
+
     if [[ $do_system -eq 1 ]]; then
         ui_info "=== System Update ==="
-        ui_confirm "Update system packages?" "$auto_yes" && ui_native_update || ui_info "Skipped"
+        if [[ "$dry_run" -eq 1 ]]; then
+            ui_info "[DRY-RUN] Would run: $(ui_detect_distro) system update"
+        else
+            ui_confirm "Update system packages?" "$auto_yes" && ui_native_update || ui_info "Skipped"
+        fi
     fi
+
     if [[ $do_nix -eq 1 ]]; then
         ui_info "=== Nix Update ==="
         ui_has_nix || { ui_warn "Nix not installed"; }
         if ui_has_nix; then
             local nix_pkgs; nix_pkgs=$(nix-env -q 2>/dev/null || true)
             [[ -z "$nix_pkgs" ]] && ui_info "No Nix packages"
-            nix-channel --update
-            while IFS= read -r pkg; do
-                [[ -z "$pkg" ]] && continue
-                ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
-                ui_info "Updating: ${pkg}"; ui_nix_update_pkg "$pkg" || ui_warn "Failed: ${pkg}"
-            done <<< "$nix_pkgs"
+            if [[ "$dry_run" -eq 1 ]]; then
+                ui_info "[DRY-RUN] Would update Nix channels and upgrade packages"
+            else
+                nix-channel --update
+                while IFS= read -r pkg; do
+                    [[ -z "$pkg" ]] && continue
+                    ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
+                    ui_info "Updating: ${pkg}"; ui_nix_update_pkg "$pkg" || ui_warn "Failed: ${pkg}"
+                done <<< "$nix_pkgs"
+            fi
         fi
     fi
+
     if [[ $do_aur -eq 1 ]]; then
         ui_info "=== AUR Update ==="
         [[ "$(ui_detect_distro)" == "arch" ]] || { ui_info "Not Arch-based"; }
@@ -57,7 +90,11 @@ main() {
                 [[ -d "$p" ]] || continue; found=1
                 local pkg; pkg=$(basename "$p")
                 ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
-                ui_aur_update "$pkg"
+                if [[ "$dry_run" -eq 1 ]]; then
+                    ui_info "[DRY-RUN] Would update AUR '${pkg}'"
+                else
+                    ui_aur_update "$pkg"
+                fi
             done
             [[ $found -eq 0 ]] && ui_info "No AUR packages cached"
         fi
