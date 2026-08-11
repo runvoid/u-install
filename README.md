@@ -1,11 +1,42 @@
-# u-install
+"# u-install ⚡
 
-Universal package manager wrapper for Linux.
+> **One command. Any distro. Any source.**
 
-![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)
-![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)
+Stop memorizing `pacman -S`, `apt install`, `nix-env -iA`, and `git clone` into AUR.
+Install `firefox`, `neovim`, or anything else the same way everywhere — from Arch to NixOS to your grandma's Debian.
 
-## Quick Install
+[![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/runvoid/u-install/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+## 🎬 See it in action
+
+```bash
+$ u-search neovim
+SOURCE     PACKAGE   VERSION      STATUS
+---------- --------- ------------ ----------
+native     neovim    0.10.0       available
+nix        neovim    0.10.0       available
+aur        neovim    0.10.0       available
+
+$ u-install neovim
+[OK] Installed via native
+
+$ u-export setup.u
+[OK] Exported configuration and 42 package(s) to setup.u
+```
+
+---
+
+## 🚀 Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/runvoid/u-install/main/install | bash
+```
+
+Or clone manually:
 
 ```bash
 git clone https://github.com/runvoid/u-install.git
@@ -13,75 +44,93 @@ cd u-install
 ./install
 ```
 
-## Commands
+Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
 
-| Command | Description |
+---
+
+## 🤔 Why u-install?
+
+| You want to... | yay | home-manager | u-install |
+|----------------|-----|--------------|-----------|
+| Install from native repos (apt, dnf, pacman...) | ❌ | ❌ | ✅ |
+| Install from AUR | ✅ | ❌ | ✅ |
+| Install from Nix | ❌ | ✅ | ✅ |
+| Move your setup to a new machine in one file | ❌ | ✅ | ✅ |
+| Run it *right now* without learning Nix/Flakes | ✅ | ❌ | ✅ |
+| Pure bash, no runtimes, installs in 3 seconds | ❌ | ❌ | ✅ |
+
+**u-install** is not a new package manager. It is a smart wrapper that picks the best source for your distro and remembers your choices.
+
+---
+
+## ✨ Features
+
+- 🌍 **Universal** — 20+ distros: Arch, Debian, Fedora, Alpine, Void, Gentoo, NixOS, Termux, and more
+- 🧠 **Auto-detect** — type `u-install firefox`, it finds the best source automatically
+- 📦 **Portable** — `u-export` your setup, move to a new machine, `u-import` — done
+- 🔒 **AUR Safety** — `u-peek` inspects AUR metadata and scans PKGBUILD for red flags *before* you build
+- 🪶 **Lightweight** — pure Bash. No Python, no Node, no heavy runtimes
+- 🔄 **Reproducible** — `.u` snapshots pin exact versions and verify integrity with SHA-256
+
+---
+
+## 📋 Commands
+
+| Command | What it does |
 |---------|-------------|
-| `u-install <pkg>` | Install from native, Nix, or AUR |
+| `u-install <pkg>` | Install from native, Nix, or AUR (auto-detected) |
 | `u-install --nix <pkg>` | Force Nix |
 | `u-install --aur <pkg>` | Force AUR |
 | `u-install --native <pkg>` | Force native PM |
 | `u-install @<group>` | Install a group (e.g. `@dev-tools`) |
-| `u-install --profile <name>` | Install from profile file |
+| `u-install --profile <name>` | Install from a profile file |
 | `u-install --self-update` | Update u-install itself |
-| `u-search <pkg>` | Search across all sources |
+| `u-search <pkg>` | Search across all sources at once |
 | `u-peek <pkg>` | Inspect AUR metadata without cloning/building |
-| `u-uninstall <pkg>` | Remove package |
+| `u-uninstall <pkg>` | Remove package (source auto-detected) |
 | `u-list` | List tracked packages (`--native`/`--nix`/`--aur`) |
-| `u-export [file.u]` | Export config + package list to a portable `.u` file |
-| `u-import <file.u>` | Reproduce config + packages from a `.u` file |
-| `u-update` | Update system, Nix, AUR |
-| `u-stats` | Show statistics |
-| `u-doctor` | System health check |
-| `u-help` | Overview of every `u-*` command |
+| `u-export [file.u]` | Export config + packages to a portable `.u` file |
+| `u-import <file.u>` | Restore config and reinstall everything |
+| `u-update` | Update system, Nix, and AUR packages |
+| `u-stats` | Show package statistics |
+| `u-doctor` | Run system health check |
+| `u-help` | Show all commands with descriptions |
 
-Every command also supports `-V`/`--version` and `-h`/`--help`.
+Every command supports `-V`/`--version` and `-h`/`--help`.
 
-## Portable setup (`.u` files)
+---
 
-Move your whole u-install setup to another machine, NixOS-style: one file
-carries both the installer configuration and the list of tracked packages.
+## 📦 Portable setup (`.u` files)
 
-```bash
-# On machine A — snapshot config + packages:
-u-export configuration.u
-
-# Copy configuration.u to machine B, then:
-u-import configuration.u          # apply config and (re)install everything
-u-import --packages-only conf.u   # skip config, install packages only
-u-import --config-only conf.u     # only restore installer settings
-u-import --latest conf.u          # ignore pinned versions, take the latest
-```
-
-A `.u` file is plain text with three sections — `[meta]`, `[config]` and
-`[packages]` — so it is easy to read, diff and edit by hand. Each package line
-is `name|source|version`: `u-export` records the installed version so
-`u-import` can reproduce it exactly (best-effort, for native package managers;
-`--latest` opts out). `[meta]` also carries a `sha256` of the package list,
-which `u-import` verifies to catch a corrupt or tampered file.
-
-## Development
-
-Shell scripts are linted with [ShellCheck](https://www.shellcheck.net/) and the
-library is covered by [bats](https://github.com/bats-core/bats-core) unit tests.
-Both run in CI on every push; to run them locally:
+Move your entire environment to another machine — NixOS-style, but for any distro.
 
 ```bash
-shellcheck install lib/u-install.sh u-*
-bats tests/
+# Machine A — snapshot everything:
+u-export setup.u
+
+# Copy setup.u to Machine B, then:
+u-import setup.u                   # restore config + reinstall all packages
+u-import --packages-only setup.u   # skip config, install packages only
+u-import --config-only setup.u     # only restore installer settings
+u-import --latest setup.u          # ignore pinned versions, take latest
 ```
 
-## Supported Distributions
+A `.u` file is plain text with three sections — `[meta]`, `[config]`, `[packages]` — so you can `diff`, `git`, and edit it by hand. Each line is `name|source|version`, and `[meta]` carries a SHA-256 checksum to catch tampering.
 
-**Arch-based:** Arch, Manjaro, EndeavourOS, Garuda, Artix, ArcoLinux, BlackArch, Parabola, Hyperbola, KaOS, Chakra, ArchLabs, Obarun
+---
 
-**Debian-based:** Debian, Ubuntu, Mint, Pop!_OS, Zorin, KDE neon, elementary, Deepin, Kali, Parrot, Raspberry Pi OS, Q4OS, antiX, MX, Lubuntu, Xubuntu, Kubuntu, Pardus
+## 🐧 Supported Distributions
 
-**Fedora-based:** Fedora, RHEL, CentOS Stream, Rocky, AlmaLinux, Oracle Linux, Amazon Linux, openEuler, EuroLinux, Miracle Linux, Springdale
+| Family | Distros |
+|--------|---------|
+| **Arch-based** | Arch, Manjaro, EndeavourOS, Garuda, Artix, ArcoLinux, BlackArch, Parabola, Hyperbola, KaOS, Chakra, ArchLabs, Obarun |
+| **Debian-based** | Debian, Ubuntu, Mint, Pop!_OS, Zorin, KDE neon, elementary, Deepin, Kali, Parrot, Raspberry Pi OS, Q4OS, antiX, MX, Lubuntu, Xubuntu, Kubuntu, Pardus |
+| **Fedora-based** | Fedora, RHEL, CentOS Stream, Rocky, AlmaLinux, Oracle Linux, Amazon Linux, openEuler, EuroLinux, Miracle Linux, Springdale |
+| **Others** | openSUSE, Alpine, Void, Gentoo, Solus, Slackware, CRUX, Clear Linux, Guix, Termux, NixOS |
 
-**Others:** openSUSE, Alpine, Void, Gentoo, Solus, Slackware, CRUX, Clear Linux, Guix, Termux, NixOS
+---
 
-## Configuration
+## ⚙️ Configuration
 
 `~/.config/u-install/u-install.conf`
 
@@ -99,10 +148,19 @@ nix_channel = nixpkgs
 aur_security_check = true
 ```
 
-## Changelog
+---
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+## 🛠️ Development
 
-## License
+Linted with [ShellCheck](https://www.shellcheck.net/), tested with [bats](https://github.com/bats-core/bats-core). CI runs on every push.
 
-MIT
+```bash
+shellcheck install lib/u-install.sh u-*
+bats tests/
+```
+
+---
+
+## 📄 License
+
+MIT © [runvoid](https://github.com/runvoid)
