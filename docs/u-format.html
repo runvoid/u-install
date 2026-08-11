@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.u File Format — u-install</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="logo">u</span>
+    <span class="brand-text">install</span>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="install.html">Install</a>
+    <a href="commands.html">Commands</a>
+    <a href="u-format.html" class="active">.u Format</a>
+    <a href="config.html">Config</a>
+    <a href="https://github.com/runvoid/u-install" target="_blank">GitHub</a>
+  </div>
+  <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+</nav>
+
+<main class="page">
+  <div class="container">
+    <h1>.u File Format</h1>
+    <p>The <code>.u</code> format is a portable snapshot of your u-install setup. One file carries both the installer configuration and the list of tracked packages.</p>
+
+    <h2>Structure</h2>
+    <div class="code-block">
+      <pre><code># u-install export
+# format: u2
+
+[meta]
+version=1.2.1
+exported=2026-08-08
+hostname=my-pc
+sha256=abc123...
+
+[config]
+parallel_downloads = 3
+auto_yes = false
+prefer_source = auto
+
+[packages]
+firefox|native|123.0-1
+neovim|nix|0.9.5
+brave-bin|aur|1.60.0</code></pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <h2>Sections</h2>
+    <h3>[meta]</h3>
+    <ul>
+      <li><code>version</code> — u-install version that created the file</li>
+      <li><code>exported</code> — date of export</li>
+      <li><code>hostname</code> — source machine name</li>
+      <li><code>sha256</code> — integrity checksum of the [packages] section</li>
+    </ul>
+
+    <h3>[config]</h3>
+    <p>Key-value pairs copied from <code>u-install.conf</code>. Applied to the target machine on import.</p>
+
+    <h3>[packages]</h3>
+    <p>One package per line: <code>name|source|version</code></p>
+    <ul>
+      <li><code>name</code> — package name</li>
+      <li><code>source</code> — native, nix, or aur</li>
+      <li><code>version</code> — pinned version (optional in older u1 format)</li>
+    </ul>
+
+    <h2>Version Pinning</h2>
+    <p>When <code>u-export</code> records a version, <code>u-import</code> tries to install that exact version. Best-effort:</p>
+    <table class="cmd-table">
+      <thead><tr><th>Distro</th><th>Pinning</th></tr></thead>
+      <tbody>
+        <tr><td>Debian/Ubuntu</td><td>Supported via <code>apt-get install pkg=version</code></td></tr>
+        <tr><td>Fedora</td><td>Supported via <code>dnf install pkg-version</code></td></tr>
+        <tr><td>Arch</td><td>Not supported by pacman — installs latest</td></tr>
+        <tr><td>Nix / AUR</td><td>Installs latest (pinning not supported)</td></tr>
+      </tbody>
+    </table>
+    <p>Use <code>--latest</code> to skip pinning entirely.</p>
+
+    <h2>Integrity</h2>
+    <p><code>u-export</code> embeds a <code>sha256</code> checksum of the package list. <code>u-import</code> verifies it and refuses tampered files unless you confirm.</p>
+  </div>
+</main>
+
+<footer>
+  <p>MIT License · <a href="https://github.com/runvoid/u-install">runvoid/u-install</a></p>
+</footer>
+<script>
+function copyCode(btn) {
+  const code = btn.previousElementSibling.textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = "Copied!";
+    setTimeout(() => btn.textContent = "Copy", 1500);
+  });
+}
+</script>
+</body>
+</html>

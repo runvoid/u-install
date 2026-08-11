@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Installation — u-install</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="logo">u</span>
+    <span class="brand-text">install</span>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="install.html" class="active">Install</a>
+    <a href="commands.html">Commands</a>
+    <a href="u-format.html">.u Format</a>
+    <a href="config.html">Config</a>
+    <a href="https://github.com/runvoid/u-install" target="_blank">GitHub</a>
+  </div>
+  <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+</nav>
+
+<main class="page">
+  <div class="container">
+    <h1>Installation</h1>
+    <h2>Requirements</h2>
+    <ul>
+      <li><code>bash</code></li>
+      <li><code>curl</code></li>
+      <li><code>git</code></li>
+    </ul>
+    <p>Optional for AUR on Arch-based distros: <code>base-devel</code>, <code>makepkg</code></p>
+
+    <h2>Quick Install</h2>
+    <div class="code-block">
+      <pre><code>git clone https://github.com/runvoid/u-install.git
+cd u-install
+./install</code></pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <p>The installer will:</p>
+    <ol>
+      <li>Copy all <code>u-*</code> commands to <code>~/.local/bin</code></li>
+      <li>Copy the shared library to <code>~/.local/share/u-install/lib/</code></li>
+      <li>Create a default config at <code>~/.config/u-install/u-install.conf</code></li>
+      <li>Add <code>~/.local/bin</code> to your shell's <code>PATH</code></li>
+    </ol>
+
+    <p>After installation, restart your terminal or run:</p>
+    <div class="code-block">
+      <pre><code>source ~/.bashrc   # or ~/.zshrc, ~/.config/fish/config.fish</code></pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <h2>Verify</h2>
+    <div class="code-block">
+      <pre><code>u-help</code></pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+    <p>You should see the list of all available commands.</p>
+  </div>
+</main>
+
+<footer>
+  <p>MIT License · <a href="https://github.com/runvoid/u-install">runvoid/u-install</a></p>
+</footer>
+<script>
+function copyCode(btn) {
+  const code = btn.previousElementSibling.textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = "Copied!";
+    setTimeout(() => btn.textContent = "Copy", 1500);
+  });
+}
+</script>
+</body>
+</html>

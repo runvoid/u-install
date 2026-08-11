@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuration — u-install</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="logo">u</span>
+    <span class="brand-text">install</span>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="install.html">Install</a>
+    <a href="commands.html">Commands</a>
+    <a href="u-format.html">.u Format</a>
+    <a href="config.html" class="active">Config</a>
+    <a href="https://github.com/runvoid/u-install" target="_blank">GitHub</a>
+  </div>
+  <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+</nav>
+
+<main class="page">
+  <div class="container">
+    <h1>Configuration</h1>
+    <p>Config file: <code>~/.config/u-install/u-install.conf</code></p>
+
+    <h2>Default Options</h2>
+    <div class="code-block">
+      <pre><code>[options]
+parallel_downloads = 3
+aur_build_dir = ~/.local/share/u-install/aur
+auto_yes = false
+prefer_source = auto
+colors = true
+log_level = info
+max_aur_builds_parallel = 2
+cleanup_after_build = false
+nix_channel = nixpkgs
+aur_security_check = true</code></pre>
+      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+
+    <h2>Option Reference</h2>
+    <table class="cmd-table">
+      <thead><tr><th>Option</th><th>Values</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>parallel_downloads</code></td><td>number</td><td>Max concurrent downloads</td></tr>
+        <tr><td><code>aur_build_dir</code></td><td>path</td><td>Where AUR packages are cloned and built</td></tr>
+        <tr><td><code>auto_yes</code></td><td>true / false</td><td>Skip all confirmation prompts</td></tr>
+        <tr><td><code>prefer_source</code></td><td>auto / native / nix / aur</td><td>Default source priority</td></tr>
+        <tr><td><code>colors</code></td><td>true / false</td><td>Enable colored output</td></tr>
+        <tr><td><code>log_level</code></td><td>debug / info / warn</td><td>Verbosity level</td></tr>
+        <tr><td><code>max_aur_builds_parallel</code></td><td>number</td><td>Max concurrent AUR builds</td></tr>
+        <tr><td><code>cleanup_after_build</code></td><td>true / false</td><td>Remove AUR build dir after install</td></tr>
+        <tr><td><code>nix_channel</code></td><td>string</td><td>Nix channel to use (default: nixpkgs)</td></tr>
+        <tr><td><code>aur_security_check</code></td><td>true / false</td><td>Scan PKGBUILD for suspicious patterns</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<footer>
+  <p>MIT License · <a href="https://github.com/runvoid/u-install">runvoid/u-install</a></p>
+</footer>
+<script>
+function copyCode(btn) {
+  const code = btn.previousElementSibling.textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = "Copied!";
+    setTimeout(() => btn.textContent = "Copy", 1500);
+  });
+}
+</script>
+</body>
+</html>

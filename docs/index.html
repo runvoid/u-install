@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>u-install — Universal Package Manager</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="logo">u</span>
+    <span class="brand-text">install</span>
+  </div>
+  <div class="nav-links">
+    <a href="index.html" class="active">Home</a>
+    <a href="install.html">Install</a>
+    <a href="commands.html">Commands</a>
+    <a href="u-format.html">.u Format</a>
+    <a href="config.html">Config</a>
+    <a href="https://github.com/runvoid/u-install" target="_blank">GitHub</a>
+  </div>
+  <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+</nav>
+
+<header class="hero">
+  <div class="hero-content">
+    <h1>One command. <span class="accent">Any distro.</span></h1>
+    <p class="subtitle">Universal package manager wrapper for Linux. Install from native repos, Nix, or AUR.</p>
+    <div class="hero-buttons">
+      <a href="#terminal" class="btn btn-primary">Try it live ↓</a>
+      <a href="https://github.com/runvoid/u-install" class="btn btn-secondary">View on GitHub</a>
+    </div>
+    <div class="badges">
+      <span class="badge">bash</span>
+      <span class="badge">20+ distros</span>
+      <span class="badge">Nix</span>
+      <span class="badge">AUR</span>
+      <span class="badge">MIT</span>
+    </div>
+  </div>
+</header>
+
+<section class="features">
+  <div class="container">
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🌍</div>
+        <h3>Universal</h3>
+        <p>Works on Arch, Debian, Fedora, Alpine, Void, Gentoo, NixOS, and 20+ more.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Simple</h3>
+        <p><code>u-install firefox</code> — that's it. Source auto-detected.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3>Portable</h3>
+        <p><code>u-export</code> your setup, move to a new machine, <code>u-import</code> — done.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🪶</div>
+        <h3>Lightweight</h3>
+        <p>Pure bash. No heavy runtimes. Installs in seconds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="terminal-section" id="terminal">
+  <div class="container">
+    <h2>Try it live</h2>
+    <p class="section-desc">Type any <code>u-*</code> command below. Packages are stored in your browser — reload and they stay.</p>
+    <div class="terminal" id="terminal-box">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <span class="terminal-title">u-install demo</span>
+        <button class="terminal-clear" onclick="termClear()">Clear</button>
+      </div>
+      <div class="terminal-body" id="terminal-body">
+        <div class="term-line">
+          <span class="term-prompt">$</span>
+          <span class="term-cursor">_</span>
+        </div>
+      </div>
+      <div class="terminal-input-line">
+        <span class="term-prompt">$</span>
+        <input type="text" id="term-input" placeholder="u-install firefox" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="terminal-hints">
+      <span>Try:</span>
+      <button onclick="termRun('u-help')">u-help</button>
+      <button onclick="termRun('u-install neovim')">u-install neovim</button>
+      <button onclick="termRun('u-search firefox')">u-search firefox</button>
+      <button onclick="termRun('u-list')">u-list</button>
+      <button onclick="termRun('u-export')">u-export</button>
+      <button onclick="termRun('u-doctor')">u-doctor</button>
+    </div>
+  </div>
+</section>
+
+<section class="distros">
+  <div class="container">
+    <h2>Supported Distributions</h2>
+    <div class="distro-grid">
+      <div class="distro-group">
+        <h4>Arch-based</h4>
+        <p>Arch, Manjaro, EndeavourOS, Garuda, Artix, ArcoLinux, BlackArch, Parabola, Hyperbola, KaOS, Chakra, ArchLabs, Obarun</p>
+      </div>
+      <div class="distro-group">
+        <h4>Debian-based</h4>
+        <p>Debian, Ubuntu, Mint, Pop!_OS, Zorin, KDE neon, elementary, Deepin, Kali, Parrot, Raspberry Pi OS, Q4OS, antiX, MX, Lubuntu, Xubuntu, Kubuntu, Pardus</p>
+      </div>
+      <div class="distro-group">
+        <h4>Fedora-based</h4>
+        <p>Fedora, RHEL, CentOS Stream, Rocky, AlmaLinux, Oracle Linux, Amazon Linux, openEuler, EuroLinux, Miracle Linux, Springdale</p>
+      </div>
+      <div class="distro-group">
+        <h4>Others</h4>
+        <p>openSUSE, Alpine, Void, Gentoo, Solus, Slackware, CRUX, Clear Linux, Guix, Termux, NixOS</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>MIT License · <a href="https://github.com/runvoid/u-install">runvoid/u-install</a></p>
+</footer>
+
+<script src="js/terminal.js"></script>
+</body>
+</html>
