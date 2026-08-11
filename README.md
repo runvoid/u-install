@@ -12,9 +12,6 @@ Install `firefox`, `neovim`, or anything else the same way everywhere — from A
 
 ---
 
-## 🎬 See it in action
-<script src="https://asciinema.org/a/g7zQkLiVpkxhxNpn.js" id="asciicast-g7zQkLiVpkxhxNpn" async></script>
-
 ```bash
 $ u-search neovim
 SOURCE     PACKAGE   VERSION      STATUS
