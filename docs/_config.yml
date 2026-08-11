@@ -1,0 +1,27 @@
+# u-install documentation site
+# Theme: just-the-docs (clean, sidebar nav, no HTML/CSS knowledge needed)
+title: u-install
+description: "Universal package manager wrapper for Linux — simple and easy"
+remote_theme: just-the-docs/just-the-docs@v0.8.1
+url: "https://runvoid.github.io"
+baseurl: "/u-install"
+
+# Navigation structure (appears in left sidebar)
+nav_external_links:
+  - title: GitHub
+    url: https://github.com/runvoid/u-install
+    hide_icon: false
+
+# Color scheme (light/dark auto)
+color_scheme: dark
+
+# Enable search
+search_enabled: true
+
+# Footer
+footer_content: "MIT License · <a href="https://github.com/runvoid/u-install">runvoid/u-install</a>"
+
+# Aux links (top right)
+aux_links:
+  "GitHub":
+    - "https://github.com/runvoid/u-install"
