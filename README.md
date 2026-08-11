@@ -1,4 +1,4 @@
-"# u-install ⚡
+# u-install ⚡
 
 > **One command. Any distro. Any source.**
 
