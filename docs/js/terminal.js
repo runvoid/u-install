@@ -1,4 +1,5 @@
 (function() {
+  window.scrollTo(0, 0);
   const body = document.getElementById('terminal-body');
   const input = document.getElementById('term-input');
   if (!body || !input) return;
@@ -401,5 +402,4 @@
   print('<span class="term-dim">Try: u-help, u-install firefox, u-search neovim, u-list</span>');
   print('');
   printPrompt();
-  input.focus();
 })();
