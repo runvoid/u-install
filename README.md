@@ -8,10 +8,12 @@ Install `firefox`, `neovim`, or anything else the same way everywhere — from A
 [![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml)
 [![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/runvoid/u-install/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![asciicast](https://asciinema.org/a/g7zQkLiVpkxhxNpn.svg)](https://asciinema.org/a/g7zQkLiVpkxhxNpn)
 
 ---
 
 ## 🎬 See it in action
+<script src="https://asciinema.org/a/g7zQkLiVpkxhxNpn.js" id="asciicast-g7zQkLiVpkxhxNpn" async></script>
 
 ```bash
 $ u-search neovim
