@@ -35,7 +35,7 @@ $ u-export setup.u
 git clone https://github.com/runvoid/u-install.git
 cd u-install
 chmod +x ./install
-sudo ./install
+./install
 ```
 
 Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
