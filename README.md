@@ -33,15 +33,10 @@ $ u-export setup.u
 ## 🚀 Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/runvoid/u-install/main/install | bash
-```
-
-Or clone manually:
-
-```bash
 git clone https://github.com/runvoid/u-install.git
 cd u-install
-./install
+chmod +x ./install
+sudo ./install
 ```
 
 Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
