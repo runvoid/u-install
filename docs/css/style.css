@@ -18,13 +18,11 @@ body {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid #30363d;
 }
-.nav-brand { display: flex; align-items: center; gap: 0.5rem; }
-.logo {
-  display: inline-flex; align-items: center; justify-content: center;
+.nav-brand { display: flex; align-items: center; gap: 0.75rem; }
+.logo-img {
   width: 32px; height: 32px;
-  background: linear-gradient(135deg, #58a6ff, #a371f7);
-  color: #fff; font-weight: 800; font-size: 1.1rem;
-  border-radius: 8px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 .brand-text { font-size: 1.25rem; font-weight: 700; color: #f0f6fc; }
 .nav-links { display: flex; gap: 1.5rem; }
