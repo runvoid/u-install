@@ -39,8 +39,18 @@
               <h3>Restart your terminal</h3>
               <p>Or <code class="inline">source ~/.bashrc</code> / <code class="inline">~/.zshrc</code>. Verify:</p>
               <div class="code-block"><pre><span class="p">$</span> <span class="k">u-install</span> --version
-<span class="ok">u-install 1.4.1</span>
-<span class="p">$</span> <span class="k">u-doctor</span> --fix   <span class="c"># optional setup wizard</span></pre></div>
+<span class="ok">u-install 1.4.1</span></pre></div>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Let the wizard set you up</h3>
+              <p>
+                The installer offers to run the setup wizard right away — it creates your config,
+                checks PATH and offers a starter <code class="inline">@dev-tools</code> profile.
+                Skipped automatically in non-interactive shells; run it anytime:
+              </p>
+              <div class="code-block"><pre><span class="k">u-doctor</span> --fix</pre></div>
             </div>
           </div>
         </div>

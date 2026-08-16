@@ -38,7 +38,7 @@ chmod +x ./install
 ./install
 ```
 
-Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
+Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`). The installer offers to run the setup wizard (`u-doctor --fix`) right away — config, PATH check and an optional starter profile in one go.
 
 ---
 

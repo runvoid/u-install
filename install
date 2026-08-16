@@ -311,6 +311,14 @@ fi
 
 info "u-install v${UI_VERSION} installer"
 
+# --- Flags ---
+no_wizard=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-wizard) no_wizard=1 ;;
+    esac
+done
+
 # --- Preflight checks ---
 missing_deps=()
 for cmd in bash curl git; do
@@ -441,6 +449,24 @@ else
     warn "u-install is NOT in your current PATH yet."
     warn "Run:  source ${primary_rc}"
     warn "Or open a new terminal."
+fi
+
+# --- First-run setup wizard (v1.4.1) ---
+# Instead of telling the user to run "u-doctor --fix" later, offer it right
+# here: config, PATH sanity and an optional starter profile.
+if [[ "$no_wizard" -eq 0 && -t 0 ]]; then
+    printf "\nRun the setup wizard now? (config, PATH check, starter profile) [Y/n] "
+    read -r wizard_answer || wizard_answer="n"
+    case "$wizard_answer" in
+        [Nn]*)
+            info "Skipped. Run 'u-doctor --fix' anytime."
+            ;;
+        *)
+            bash "${UI_BIN_DIR}/u-doctor" --fix || warn "Wizard did not complete; run 'u-doctor --fix' anytime."
+            ;;
+    esac
+else
+    info "Run 'u-doctor --fix' anytime to configure u-install."
 fi
 
 ok "Installation complete."

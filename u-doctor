@@ -98,6 +98,8 @@ wizard() {
     # 4. PATH
     if [[ ":$PATH:" == *":${UI_BIN_DIR}:"* ]]; then
         printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s is on PATH\n" "$UI_BIN_DIR"
+    elif grep -qF "$UI_BIN_DIR" "$HOME/.bashrc" 2>/dev/null; then
+        printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s is already configured in ~/.bashrc\n" "$UI_BIN_DIR"
     else
         printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} %s is NOT on PATH\n" "$UI_BIN_DIR"
         printf "  Add it to ~/.bashrc now? [Y/n]: "

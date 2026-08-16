@@ -38,7 +38,9 @@ review screen for `u-sync`, and a first-run setup wizard for `u-doctor`.
   for `prefer_source` and background update settings (writing them to
   `u-install.conf`), checks `~/.local/bin` is on PATH (offers to add it
   with the same marker `install --uninstall` cleans up), and offers the
-  `@dev-tools` starter profile on fresh installs.
+  `@dev-tools` starter profile on fresh installs. `./install` now offers
+  to run the wizard right after installation (skip with `--no-wizard`;
+  it is skipped automatically when stdin is not a terminal).
 
 ### Changed
 - `u-install` in auto mode no longer falls through to the next source
