@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-08-16
+
+TUI polish release: colored tables with status glyphs, batch summaries with
+honest exit codes, an interactive source picker for `u-search`, a checkbox
+review screen for `u-sync`, and a first-run setup wizard for `u-doctor`.
+
+### Added
+- **Brand-new website** (GitHub Pages, built from `web/` with Vite into `docs/`):
+  dark/light themes with a toggle, an animated terminal on the landing page,
+  a searchable command reference rendered from `commands.json` (generated
+  from real `--help` output by `tools/gen-docs.sh`), copy buttons, and pages
+  for the `.u` format, config reference and install steps. CI builds the site
+  and fails if the committed `docs/` output is stale.
+- **Colored tables & status glyphs**: statuses in `u-search` / `u-outdated`
+  are colorized (available — green, UPDATE — yellow, not found — dim);
+  `u-diff` shows `-removed-` in red and `-missing-` in green; `u-doctor`
+  uses `✓ ✗ ⚠` glyphs (ASCII fallback on non-UTF locales; colors stay off
+  when output is piped).
+- **Batch summaries**: `u-install`, `u-uninstall` and `u-sync` end with
+  `✓ N installed · – N skipped · ✗ N failed` lines. `u-install` and
+  `u-uninstall` now exit non-zero when anything failed (so `u-import`,
+  `u-sync` and scripts count failures correctly).
+- `u-search -i/--install` — after the search table, pick a source from a
+  numbered menu and hand off to `u-install --<source>`. Requires a tty;
+  ignored with a warning otherwise.
+- **`u-sync` review screen**: on a terminal, missing/extra packages are
+  shown as a checklist — toggle items by number, Enter applies the
+  selection, `n` applies nothing, `q` cancels. Non-interactive runs keep
+  the classic prompts, `-y` applies everything without asking.
+- `u-doctor --fix` — first-run wizard: creates the default config, asks
+  for `prefer_source` and background update settings (writing them to
+  `u-install.conf`), checks `~/.local/bin` is on PATH (offers to add it
+  with the same marker `install --uninstall` cleans up), and offers the
+  `@dev-tools` starter profile on fresh installs.
+
+### Changed
+- `u-install` in auto mode no longer falls through to the next source
+  after you explicitly decline a found package — a decline is now counted
+  as "skipped" instead of trying Nix/AUR after your "no".
+- `u-outdated` prints a summary line (up to date / updates / unknown)
+  instead of a single ok-line, and says so when a filter matches nothing.
+
 ## [1.4.0] - 2026-08-16
 
 Maintenance and housekeeping release: every command now reports live progress,

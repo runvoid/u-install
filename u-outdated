@@ -78,14 +78,18 @@ main() {
             unknown=$((unknown+1))
         fi
         ui_progress_break
-        printf "  %-24s %-8s %-18s %-18s %s\n" "$pkg" "$src" "${inst:-?}" "${avail:-?}" "$status"
+        printf "  %-24s %-8s %-18s %-18s %s\n" "$pkg" "$src" "${inst:-?}" "${avail:-?}" "$(ui_fmt_status "$status")"
     done < <(ui_db_list)
     ui_progress_end
 
     printf "\n"
-    ui_ok "Checked ${checked}: ${outdated} update(s) available, ${unknown} unknown."
-    if [[ "$outdated" -gt 0 ]]; then
-        ui_info "Upgrade single packages with: u-upgrade <pkg>"
+    if [[ "$checked" -eq 0 ]]; then
+        ui_info "No tracked packages match this filter."
+    else
+        printf "  Summary: ${UI_GREEN}${UI_G_OK}${UI_NC} %d up to date ${UI_G_INFO} ${UI_YELLOW}${UI_G_WARN}${UI_NC} %d update(s) ${UI_G_INFO} ${UI_DIM}${UI_G_INFO}${UI_NC} %d unknown\n" "$((checked - outdated - unknown))" "$outdated" "$unknown"
+        if [[ "$outdated" -gt 0 ]]; then
+            ui_info "Upgrade single packages with: u-upgrade <pkg>"
+        fi
     fi
 }
 main "$@"

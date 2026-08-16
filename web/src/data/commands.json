@@ -1,0 +1,95 @@
+{
+  "version": "1.4.1",
+  "commands": [
+    {
+      "name": "u-install",
+      "description": "Install packages from the native package manager, Nix, or the AUR, auto-detecting the best available source.",
+      "help": "u-install 1.4.1\n\nInstall packages from the native package manager, Nix, or the AUR,\nauto-detecting the best available source.\n\nUsage: u-install [OPTIONS] <PACKAGE...>\n         u-install @<GROUP>\n         u-install --profile <NAME>\n\nOptions:\n  --native        Force native package manager\n  --nix           Force Nix\n  --aur           Force AUR (Arch-based only)\n  --profile       Install packages from a profile list\n  --self-update   Update u-install itself\n  --dry-run       Show what would be installed without making changes\n  -y, --yes       Assume yes to all prompts\n  -V, --version   Show version information\n  -h, --help      Show this help message"
+    },
+    {
+      "name": "u-uninstall",
+      "description": "Remove packages tracked by u-install, using their recorded source.",
+      "help": "u-uninstall 1.4.1\n\nRemove packages tracked by u-install, using their recorded source.\n\nUsage: u-uninstall [OPTIONS] <PACKAGE...>\n\nOptions:\n  -y, --yes      Assume yes to all prompts\n  --force        Allow removing critical system packages\n  --dry-run      Show what would be removed without making changes\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-update",
+      "description": "Update system packages, Nix packages, cached AUR builds, and u-install itself.",
+      "help": "u-update 1.4.1\n\nUpdate system packages, Nix packages, cached AUR builds, and u-install itself.\n\nUsage: u-update [OPTIONS]\n\nOptions:\n  --system       Update only system packages\n  --nix          Update only Nix packages\n  --aur          Update only AUR packages\n  --self         Update only u-install itself\n  --dry-run      Show what would be updated without making changes\n  -y, --yes      Assume yes to all prompts\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-upgrade",
+      "description": "Upgrade a single tracked package using its recorded source (native, Nix or AUR).",
+      "help": "u-upgrade 1.4.1\n\nUpgrade a single tracked package using its recorded source (native, Nix or AUR).\n\nUsage: u-upgrade [OPTIONS] <PACKAGE...>\n\nOptions:\n  --dry-run      Show what would be upgraded without making changes\n  -y, --yes      Assume yes to all prompts\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-search",
+      "description": "Search for a package across native, Nix and AUR sources.",
+      "help": "u-search 1.4.1\n\nSearch for a package across native, Nix and AUR sources.\n\nUsage: u-search [OPTIONS] <PACKAGE...>\n\nOptions:\n  -i, --install  After searching, pick a source from a menu and install\n  --no-cache     Skip the search cache and refresh results\n  -V, --version  Show version information\n  -h, --help  Show this help message"
+    },
+    {
+      "name": "u-peek",
+      "description": "Inspect AUR package metadata without cloning or building it. Helps you decide whether an AUR package is worth touching at all.",
+      "help": "u-peek 1.4.1\n\nInspect AUR package metadata without cloning or building it.\nHelps you decide whether an AUR package is worth touching at all.\n\nUsage: u-peek [OPTIONS] <PACKAGE...>\n\nOptions:\n  -V, --version  Show version information\n  -h, --help  Show this help message"
+    },
+    {
+      "name": "u-list",
+      "description": "List packages tracked by u-install (from its database).",
+      "help": "u-list 1.4.1\n\nList packages tracked by u-install (from its database).\n\nUsage: u-list [OPTIONS]\n\nOptions:\n  --native       Show only native packages\n  --nix          Show only Nix packages\n  --aur          Show only AUR packages\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-outdated",
+      "description": "Compare installed versions of tracked packages against their sources and show which ones have an update available.",
+      "help": "u-outdated 1.4.1\n\nCompare installed versions of tracked packages against their sources and\nshow which ones have an update available.\n\nUsage: u-outdated [OPTIONS]\n\nOptions:\n  --native       Check only native packages\n  --nix          Check only Nix packages\n  --aur          Check only AUR packages\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-info",
+      "description": "Show detailed information about a package tracked by u-install.",
+      "help": "u-info 1.4.1\n\nShow detailed information about a package tracked by u-install.\n\nUsage: u-info [OPTIONS] <PACKAGE...>\n\nOptions:\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-diff",
+      "description": "Compare two .u snapshot files to see differences in packages and versions.",
+      "help": "u-diff 1.4.1\n\nCompare two .u snapshot files to see differences in packages and versions.\n\nUsage: u-diff [OPTIONS] <FILE1.u> <FILE2.u>\n\nOptions:\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-sync",
+      "description": "Synchronize the current machine's packages with a .u snapshot file. Installs missing packages and optionally removes extras.",
+      "help": "u-sync 1.4.1\n\nSynchronize the current machine's packages with a .u snapshot file.\nInstalls missing packages and optionally removes extras.\n\nUsage: u-sync [OPTIONS] <FILE.u>\n\nOptions:\n  -y, --yes      Assume yes to all prompts\n  --dry-run      Show what would be synced without making changes\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-history",
+      "description": "Show the journal of u-install actions (installs, removals, upgrades).",
+      "help": "u-history 1.4.1\n\nShow the journal of u-install actions (installs, removals, upgrades).\n\nUsage: u-history [OPTIONS] [N]\n\nArguments:\n  N              Show the last N entries (default: 20)\n\nOptions:\n  -a, --all      Show the full journal\n  -p, --pkg PKG  Show only entries for PKG\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-clean",
+      "description": "Reclaim disk space: clear the search cache, cached AUR build directories, old Nix generations and native orphan packages. Shows what would be freed before touching anything.",
+      "help": "u-clean 1.4.1\n\nReclaim disk space: clear the search cache, cached AUR build directories,\nold Nix generations and native orphan packages. Shows what would be freed\nbefore touching anything.\n\nUsage: u-clean [OPTIONS]\n\nOptions:\n  --dry-run      Show what would be cleaned without making changes\n  -y, --yes      Assume yes to all prompts\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-stats",
+      "description": "Show statistics about packages tracked by u-install.",
+      "help": "u-stats 1.4.1\n\nShow statistics about packages tracked by u-install.\n\nUsage: u-stats [OPTIONS]\n\nOptions:\n  -V, --version  Show version information\n  -h, --help  Show this help message"
+    },
+    {
+      "name": "u-doctor",
+      "description": "Diagnose the environment: dependencies, sources, config and conflicts.",
+      "help": "u-doctor 1.4.1\n\nDiagnose the environment: dependencies, sources, config and conflicts.\n\nUsage: u-doctor [OPTIONS]\n\nOptions:\n  --fix          Interactive first-run wizard: create/tune the config,\n                 check PATH and offer a starter profile\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-export",
+      "description": "Export your u-install setup (installer config + tracked packages) to a portable .u file. Copy that file to another machine and run `u-import` to reproduce the same configuration and packages.",
+      "help": "u-export 1.4.1\n\nExport your u-install setup (installer config + tracked packages) to a\nportable .u file. Copy that file to another machine and run `u-import`\nto reproduce the same configuration and packages.\n\nUsage: u-export [OPTIONS] [FILE]\n\nArguments:\n  FILE           Output file (default: configuration.u)\n\nOptions:\n  -f, --force    Overwrite FILE without asking\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    },
+    {
+      "name": "u-import",
+      "description": "Apply a .u file produced by `u-export`: restore the installer configuration and (re)install every package it lists. Use it to bring a fresh machine to the same state as an existing one.",
+      "help": "u-import 1.4.1\n\nApply a .u file produced by `u-export`: restore the installer configuration\nand (re)install every package it lists. Use it to bring a fresh machine to the\nsame state as an existing one.\n\nUsage: u-import [OPTIONS] <FILE>\n\nOptions:\n  --config-only    Apply only the installer configuration\n  --packages-only  Install only the packages\n  --latest         Ignore pinned versions; install the latest available\n  -y, --yes        Assume yes to all prompts\n  -V, --version    Show version information\n  -h, --help       Show this help message"
+    },
+    {
+      "name": "u-help",
+      "description": "Top-level entry point for the u-install toolkit: lists every u-* command. Run any command with --help for its own options.",
+      "help": "u-help 1.4.1\n\nTop-level entry point for the u-install toolkit: lists every u-* command.\nRun any command with --help for its own options.\n\nUsage: u-help [OPTIONS]\n\nOptions:\n  -V, --version  Show version information\n  -h, --help     Show this help message"
+    }
+  ]
+}

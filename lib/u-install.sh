@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# u-install common library v1.4.0
+# u-install common library v1.4.1
 # shellcheck shell=bash
 # shellcheck disable=SC2034
 
 UI_NAME="u-install"
-UI_VERSION="1.4.0"
+UI_VERSION="1.4.1"
 UI_CONFIG_DIR="${HOME}/.config/u-install"
 UI_CONFIG_FILE="${UI_CONFIG_DIR}/u-install.conf"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
@@ -27,12 +27,15 @@ UI_AUTO_UPDATE_CHECK=1
 UI_UPDATE_CHECK_INTERVAL_DAYS=7
 
 ui_setup_colors() {
+    local utf=0
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *[Uu][Tt][Ff]*) utf=1 ;; esac
     if [[ -t 1 && "$UI_COLORS" -eq 1 ]]; then
         UI_RED='\033[0;31m'
         UI_GREEN='\033[0;32m'
         UI_YELLOW='\033[1;33m'
         UI_BLUE='\033[0;34m'
         UI_CYAN='\033[0;36m'
+        UI_DIM='\033[2m'
         UI_NC='\033[0m'
     else
         UI_RED=''
@@ -40,8 +43,35 @@ ui_setup_colors() {
         UI_YELLOW=''
         UI_BLUE=''
         UI_CYAN=''
+        UI_DIM=''
         UI_NC=''
     fi
+    # Status glyphs (v1.4.1): unicode when the locale supports it, ASCII otherwise.
+    if [[ "$utf" -eq 1 ]]; then
+        UI_G_OK='✓'
+        UI_G_FAIL='✗'
+        UI_G_WARN='⚠'
+        UI_G_ARROW='→'
+        UI_G_SKIP='–'
+        UI_G_INFO='·'
+    else
+        UI_G_OK='+'
+        UI_G_FAIL='x'
+        UI_G_WARN='!'
+        UI_G_ARROW='->'
+        UI_G_SKIP='-'
+        UI_G_INFO='.'
+    fi
+}
+
+# Colorize a status word for table output (colors are empty off-tty).
+ui_fmt_status() {
+    case "$1" in
+        available|"up to date") printf "${UI_GREEN}%-s${UI_NC}" "$1" ;;
+        UPDATE)                printf "${UI_YELLOW}%-s${UI_NC}" "$1" ;;
+        "not found")           printf "${UI_DIM}%-s${UI_NC}" "$1" ;;
+        *)                     printf "${UI_CYAN}%-s${UI_NC}" "$1" ;;
+    esac
 }
 
 ui_info()  { ui_progress_break; [[ "$UI_LOG_LEVEL" =~ ^(debug|info)$ ]] && printf "${UI_CYAN}[${UI_NAME}]${UI_NC} %s\n" "$1"; }
@@ -700,7 +730,7 @@ ui_diff_u() {
     while IFS='|' read -r pkg src ver; do
         [[ -z "$pkg" ]] && continue
         if ! ui_list_has "$pkgs2" "$pkg"; then
-            printf "  %-24s %-8s %-15s %s\n" "$pkg" "$src" "${ver:-latest}" "-removed-"
+            printf "  %-24s %-8s %-15s ${UI_RED}%-s${UI_NC}\n" "$pkg" "$src" "${ver:-latest}" "-removed-"
         fi
     done <<< "$pkgs1"
 
@@ -708,7 +738,7 @@ ui_diff_u() {
     while IFS='|' read -r pkg src ver; do
         [[ -z "$pkg" ]] && continue
         if ! ui_list_has "$pkgs1" "$pkg"; then
-            printf "  %-24s %-8s %-15s %s\n" "$pkg" "$src" "-missing-" "${ver:-latest}"
+            printf "  %-24s %-8s ${UI_GREEN}%-15s${UI_NC} %s\n" "$pkg" "$src" "-missing-" "${ver:-latest}"
         fi
     done <<< "$pkgs2"
 
@@ -724,9 +754,63 @@ ui_diff_u() {
 }
 
 # --- u-sync helper (v1.3.0) ---
+# Interactive checkbox screen for ui_sync_u (v1.4.1). Reads missing/extra
+# and toggles the sel_m/sel_e arrays in the caller's scope.
+ui_sync_review() {
+    local box_on="${UI_GREEN}[x]${UI_NC}" box_off="${UI_DIM}[ ]${UI_NC}"
+    local i n m_count="${#missing[@]}"
+    while true; do
+        printf "\n  Review sync changes:\n"
+        n=0
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            printf "    Install:\n"
+            for i in "${!missing[@]}"; do
+                n=$((n+1))
+                local p s v; IFS='|' read -r p s v <<< "${missing[$i]}"
+                local box="$box_off"; [[ "${sel_m[$i]}" -eq 1 ]] && box="$box_on"
+                printf "      %s %d) %s ${UI_G_ARROW} %s%s\n" "$box" "$n" "$p" "${s:-native}" "${v:+ @ ${v}}"
+            done
+        fi
+        if [[ ${#extra[@]} -gt 0 ]]; then
+            printf "    Remove:\n"
+            for i in "${!extra[@]}"; do
+                n=$((n+1))
+                local p s2; IFS='|' read -r p s2 <<< "${extra[$i]}"
+                local box="$box_off"; [[ "${sel_e[$i]}" -eq 1 ]] && box="$box_on"
+                printf "      %s %d) ${UI_RED}%s${UI_NC} ${UI_G_ARROW} %s\n" "$box" "$n" "-$p" "${s2:-native}"
+            done
+        fi
+        printf "\n  Toggle: numbers ${UI_G_ARROW} Enter/a apply ${UI_G_ARROW} n none ${UI_G_ARROW} q cancel\n  > "
+        local inp; read -r inp || return 1
+        case "$inp" in
+            q|Q) return 1 ;;
+            a|A|"") return 0 ;;
+            n|N)
+                for i in "${!sel_m[@]}"; do sel_m[i]=0; done
+                for i in "${!sel_e[@]}"; do sel_e[i]=0; done
+                return 0
+                ;;
+            *)
+                local tok
+                for tok in $inp; do
+                    [[ "$tok" =~ ^[0-9]+$ ]] || continue
+                    if [[ "$tok" -ge 1 && "$tok" -le "$m_count" ]]; then
+                        i=$((tok-1))
+                        [[ "${sel_m[$i]}" -eq 1 ]] && sel_m[i]=0 || sel_m[i]=1
+                    elif [[ "$tok" -ge 1 && "$tok" -le $((m_count + ${#extra[@]})) ]]; then
+                        i=$((tok - m_count - 1))
+                        [[ "${sel_e[$i]}" -eq 1 ]] && sel_e[i]=0 || sel_e[i]=1
+                    fi
+                done
+                ;;
+        esac
+    done
+}
+
 ui_sync_u() {
     local uf="$1" auto_yes="${2:-0}" dry_run="${3:-0}"
-    local current_pkgs sync_pkgs missing=() extra=() count=0 fail=0 idx=0
+    local current_pkgs sync_pkgs missing=() extra=() count=0 removed=0 fail=0 idx=0
+    local -a sel_m=() sel_e=()
 
     current_pkgs=$(ui_db_list | cut -d'|' -f1 | sort)
     sync_pkgs=$(ui_uf_section "$uf" packages | cut -d'|' -f1 | sort)
@@ -757,9 +841,24 @@ ui_sync_u() {
         printf "\n  Missing packages:\n"
         for m in "${missing[@]}"; do
             local p s v; IFS='|' read -r p s v <<< "$m"
-            printf "    + %s (%s)\n" "$p" "$s"
+            printf "    ${UI_GREEN}%s${UI_NC} %s (%s)\n" "+" "$p" "$s"
         done
-        if [[ "$dry_run" -eq 1 ]]; then
+    fi
+
+    if [[ ${#extra[@]} -gt 0 ]]; then
+        printf "\n  Extra packages (not in .u file):\n"
+        for e in "${extra[@]}"; do
+            local p s; IFS='|' read -r p s <<< "$e"
+            printf "    ${UI_RED}%s${UI_NC} %s (%s)\n" "-" "$p" "$s"
+        done
+    fi
+
+    # --- Decide what to apply ---
+    for m in "${missing[@]}"; do sel_m+=(1); done
+    for e in "${extra[@]}"; do sel_e+=(1); done
+
+    if [[ "$dry_run" -eq 1 ]]; then
+        if [[ ${#missing[@]} -gt 0 ]]; then
             printf "\n  Would install (dry run):\n"
             for m in "${missing[@]}"; do
                 local p s v target; IFS='|' read -r p s v <<< "$m"
@@ -771,54 +870,76 @@ ui_sync_u() {
                     printf "    + u-install %s -y\n" "$target"
                 fi
             done
-        elif ui_confirm "Install missing packages?" "$auto_yes"; then
-            for m in "${missing[@]}"; do
-                local p s v target; IFS='|' read -r p s v <<< "$m"
-                target="$p"
-                [[ -n "$v" ]] && target="${p}=${v}"
-                idx=$((idx+1))
-                ui_progress "$idx" "${#missing[@]}" "installing ${p}"
-                ui_info "Installing ${p}..."
-                if [[ -n "$s" ]]; then
-                    "${UI_BIN_DIR}/u-install" "--${s}" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
-                else
-                    "${UI_BIN_DIR}/u-install" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
-                fi
-                count=$((count+1))
-            done
-            ui_progress_end
         fi
-    fi
-
-    if [[ ${#extra[@]} -gt 0 ]]; then
-        printf "\n  Extra packages (not in .u file):\n"
-        for e in "${extra[@]}"; do
-            local p s; IFS='|' read -r p s <<< "$e"
-            printf "    - %s (%s)\n" "$p" "$s"
-        done
-        if [[ "$dry_run" -eq 1 ]]; then
+        if [[ ${#extra[@]} -gt 0 ]]; then
             printf "\n  Would remove (dry run):\n"
             for e in "${extra[@]}"; do
                 local p; IFS='|' read -r p _ <<< "$e"
                 printf "    - u-uninstall %s -y\n" "$p"
             done
-        elif ui_confirm "Remove extra packages?" "$auto_yes"; then
-            idx=0
-            for e in "${extra[@]}"; do
-                local p; IFS='|' read -r p _ <<< "$e"
-                idx=$((idx+1))
-                ui_progress "$idx" "${#extra[@]}" "removing ${p}"
-                ui_info "Removing ${p}..."
-                "${UI_BIN_DIR}/u-uninstall" "$p" -y || ui_warn "Failed to remove: ${p}"
-            done
-            ui_progress_end
         fi
+    elif [[ "${#missing[@]}" -gt 0 || "${#extra[@]}" -gt 0 ]]; then
+        if [[ "$auto_yes" -eq 1 ]]; then
+            : # apply everything, no questions
+        elif [[ -t 0 ]]; then
+            if ! ui_sync_review; then
+                ui_info "Sync cancelled. No changes were made."
+                return 0
+            fi
+        else
+            # Non-interactive without -y: keep the classic two prompts
+            # (EOF defaults to yes, as before).
+            local i
+            if [[ ${#missing[@]} -gt 0 ]] && ! ui_confirm "Install missing packages?"; then
+                for i in "${!sel_m[@]}"; do sel_m[i]=0; done
+            fi
+            if [[ ${#extra[@]} -gt 0 ]] && ! ui_confirm "Remove extra packages?"; then
+                for i in "${!sel_e[@]}"; do sel_e[i]=0; done
+            fi
+        fi
+    fi
+
+    # --- Apply selected ---
+    if [[ "$dry_run" -ne 1 ]]; then
+        local total=0 i
+        for i in "${!sel_m[@]}"; do [[ "${sel_m[$i]}" -eq 1 ]] && total=$((total+1)); done
+        idx=0
+        for i in "${!missing[@]}"; do
+            [[ "${sel_m[$i]}" -eq 1 ]] || continue
+            local p s v target; IFS='|' read -r p s v <<< "${missing[$i]}"
+            target="$p"
+            [[ -n "$v" ]] && target="${p}=${v}"
+            idx=$((idx+1))
+            ui_progress "$idx" "$total" "installing ${p}"
+            ui_info "Installing ${p}..."
+            if [[ -n "$s" ]]; then
+                "${UI_BIN_DIR}/u-install" "--${s}" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
+            else
+                "${UI_BIN_DIR}/u-install" "$target" -y || { ui_warn "Failed: ${p}"; fail=$((fail+1)); }
+            fi
+            count=$((count+1))
+        done
+        [[ "$total" -gt 0 ]] && ui_progress_end
+
+        total=0
+        for i in "${!sel_e[@]}"; do [[ "${sel_e[$i]}" -eq 1 ]] && total=$((total+1)); done
+        idx=0
+        for i in "${!extra[@]}"; do
+            [[ "${sel_e[$i]}" -eq 1 ]] || continue
+            local p; IFS='|' read -r p _ <<< "${extra[$i]}"
+            idx=$((idx+1))
+            ui_progress "$idx" "$total" "removing ${p}"
+            ui_info "Removing ${p}..."
+            "${UI_BIN_DIR}/u-uninstall" "$p" -y || ui_warn "Failed to remove: ${p}"
+            removed=$((removed+1))
+        done
+        [[ "$total" -gt 0 ]] && ui_progress_end
     fi
 
     if [[ "$dry_run" -eq 1 ]]; then
         ui_info "Dry run complete. No changes were made."
     else
-        ui_ok "Sync complete. Installed: ${count}, failed: ${fail}."
+        printf "\n  Sync summary: ${UI_GREEN}${UI_G_OK}${UI_NC} %d installed ${UI_G_INFO} ${UI_RED}${UI_G_FAIL}${UI_NC} %d failed ${UI_G_INFO} ${UI_YELLOW}${UI_G_SKIP}${UI_NC} %d removed\n" "$count" "$fail" "$removed"
     fi
     return 0
 }

@@ -6,7 +6,7 @@ Stop memorizing `pacman -S`, `apt install`, `nix-env -iA`, and `git clone` into 
 Install `firefox`, `neovim`, or anything else the same way everywhere — from Arch to NixOS to your grandma's Debian.
 
 [![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml)
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/runvoid/u-install/releases)
+[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](https://github.com/runvoid/u-install/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![asciicast](https://asciinema.org/a/g7zQkLiVpkxhxNpn.svg)](https://asciinema.org/a/g7zQkLiVpkxhxNpn)
 
@@ -79,7 +79,7 @@ Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
 | `u-install @<group>` | Install a group (e.g. `@dev-tools`) |
 | `u-install --profile <name>` | Install from a profile file |
 | `u-install --self-update` | Update u-install itself |
-| `u-search <pkg>` | Search across all sources at once |
+| `u-search <pkg>` | Search across all sources at once (`-i`: pick & install) |
 | `u-peek <pkg>` | Inspect AUR metadata without cloning/building |
 | `u-uninstall <pkg>` | Remove package (source auto-detected) |
 | `u-list` | List tracked packages (`--native`/`--nix`/`--aur`) |
@@ -94,7 +94,7 @@ Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
 | `u-diff <a.u> <b.u>` | Compare two `.u` snapshot files |
 | `u-sync <file.u>` | Sync current machine with a `.u` snapshot |
 | `u-stats` | Show package statistics |
-| `u-doctor` | Run system health check |
+| `u-doctor` | Run system health check (`--fix`: setup wizard) |
 | `u-help` | Show all commands with descriptions |
 
 Every command supports `-V`/`--version` and `-h`/`--help`.
@@ -158,6 +158,19 @@ Linted with [ShellCheck](https://www.shellcheck.net/), tested with [bats](https:
 ```bash
 shellcheck install lib/u-install.sh u-*
 bats tests/
+```
+
+### Website
+
+The docs site (deployed from `docs/` to GitHub Pages) is a [Vite](https://vitejs.dev) project in `web/`.
+The command reference is generated from the real `--help` output by `tools/gen-docs.sh` — CI fails
+if either the generated data or the committed `docs/` build is stale.
+
+```bash
+bash tools/gen-docs.sh        # regenerate web/src/data/commands.json
+cd web && npm install
+npm run dev                   # live-preview on localhost:5173
+npm run build                 # build the site into ../docs
 ```
 
 ---

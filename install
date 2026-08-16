@@ -2,7 +2,7 @@
 set -euo pipefail
 shopt -s nullglob
 
-UI_VERSION="1.4.0"
+UI_VERSION="1.4.1"
 UI_BIN_DIR="${HOME}/.local/bin"
 UI_DATA_DIR="${HOME}/.local/share/u-install"
 UI_CONFIG_DIR="${HOME}/.config/u-install"
@@ -49,6 +49,26 @@ _u_uninstall() {
     [[ "$cur" == -* ]] && COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
 }
 complete -F _u_uninstall u-uninstall
+
+_u_search() {
+    local cur
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "-i --install --no-cache -V --version -h --help" -- "$cur") )
+    fi
+}
+complete -F _u_search u-search
+
+_u_doctor() {
+    local cur
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "--fix -V --version -h --help" -- "$cur") )
+    fi
+}
+complete -F _u_doctor u-doctor
 
 _u_update() {
     local cur opts
@@ -185,6 +205,19 @@ case "$service" in
         _arguments \
             '--dry-run[Show what would be done]' \
             '(-y --yes)'{-y,--yes}'[Assume yes]' \
+            '(-V --version)'{-V,--version}'[Show version]' \
+            '(-h --help)'{-h,--help}'[Show help]'
+        ;;
+    u-search)
+        _arguments \
+            '(-i --install)'{-i,--install}'[Pick a source and install after searching]' \
+            '--no-cache[Skip the search cache]' \
+            '(-V --version)'{-V,--version}'[Show version]' \
+            '(-h --help)'{-h,--help}'[Show help]'
+        ;;
+    u-doctor)
+        _arguments \
+            '--fix[Interactive setup wizard]' \
             '(-V --version)'{-V,--version}'[Show version]' \
             '(-h --help)'{-h,--help}'[Show help]'
         ;;

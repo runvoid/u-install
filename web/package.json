@@ -1,0 +1,15 @@
+{
+  "name": "u-install-web",
+  "private": true,
+  "version": "1.4.1",
+  "type": "module",
+  "description": "u-install website — built with Vite into ../docs for GitHub Pages",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}

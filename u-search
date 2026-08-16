@@ -16,6 +16,7 @@ Search for a package across native, Nix and AUR sources.
 Usage: u-search [OPTIONS] <PACKAGE...>
 
 Options:
+  -i, --install  After searching, pick a source from a menu and install
   --no-cache     Skip the search cache and refresh results
   -V, --version  Show version information
   -h, --help  Show this help message
@@ -59,12 +60,44 @@ probe_cached() {
     fi
     printf '%s|%s' "$ver" "$status"
 }
+# Interactive source picker for -i: shows available sources for the
+# package and hands the choice off to u-install.
+pick_and_install() {
+    local pkg="$1" ns="$2" nv="$3" nxs="$4" nxv="$5" as="$6" av="$7"
+    if [[ ! -t 0 ]]; then
+        ui_warn "--install ignored: stdin is not a terminal"
+        return 0
+    fi
+    local opts=() labels=()
+    [[ "$ns"  == "available" ]] && { opts+=("native"); labels+=("native  ${nv:-latest}"); }
+    [[ "$nxs" == "available" ]] && { opts+=("nix");    labels+=("nix     ${nxv:-latest}"); }
+    [[ "$as"  == "available" ]] && { opts+=("aur");    labels+=("aur     ${av:-latest}"); }
+    if [[ ${#opts[@]} -eq 0 ]]; then
+        ui_info "No available source for '${pkg}'."
+        return 0
+    fi
+    printf "\n  Install '%s' from which source?\n" "$pkg"
+    local i
+    for i in "${!opts[@]}"; do
+        printf "    %d) %s\n" "$((i+1))" "${labels[$i]}"
+    done
+    printf "    0) cancel\n  Choice [0-%d]: " "${#opts[@]}"
+    local pick; read -r pick || pick=0
+    if [[ "$pick" =~ ^[0-9]+$ ]] && [[ "$pick" -ge 1 && "$pick" -le "${#opts[@]}" ]]; then
+        local src="${opts[$((pick-1))]}"
+        ui_info "Running: u-install --${src} ${pkg}"
+        "${UI_BIN_DIR}/u-install" "--${src}" "$pkg" || ui_warn "Install cancelled or failed"
+    else
+        ui_info "Cancelled."
+    fi
+}
 main() {
-    local packages=() use_cache=1
+    local packages=() use_cache=1 interactive=0
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
             -V|--version) ui_print_version; exit 0 ;;
+            -i|--install) interactive=1 ;;
             --no-cache) use_cache=0 ;;
             -*) ui_warn "Unknown option: $arg" ;;
             *) packages+=("$arg") ;;
@@ -85,7 +118,7 @@ main() {
         local row nv ns
         row="$(probe_cached native "$pkg")"
         nv="${row%%|*}"; ns="${row##*|}"
-        printf "  %-10s %-20s %-15s %s\n" "native" "$pkg" "${nv:-""}" "$ns"
+        printf "  %-10s %-20s %-15s %s\n" "native" "$pkg" "${nv:-""}" "$(ui_fmt_status "$ns")"
         # Nix
         local nxv="" nxs="not found"
         if ui_has_nix; then
@@ -94,7 +127,7 @@ main() {
         else
             nxs="Nix not installed"
         fi
-        printf "  %-10s %-20s %-15s %s\n" "nix" "$pkg" "${nxv:-""}" "$nxs"
+        printf "  %-10s %-20s %-15s %s\n" "nix" "$pkg" "${nxv:-""}" "$(ui_fmt_status "$nxs")"
         # AUR
         local av="" as="not found"
         if [[ "$distro" == "arch" ]]; then
@@ -103,8 +136,11 @@ main() {
         else
             as="Arch only"
         fi
-        printf "  %-10s %-20s %-15s %s\n" "aur" "$pkg" "${av:-""}" "$as"
+        printf "  %-10s %-20s %-15s %s\n" "aur" "$pkg" "${av:-""}" "$(ui_fmt_status "$as")"
         printf "\n"
+        if [[ "$interactive" -eq 1 ]]; then
+            pick_and_install "$pkg" "$ns" "$nv" "$nxs" "$nxv" "$as" "$av"
+        fi
     done
 }
 main "$@"

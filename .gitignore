@@ -10,3 +10,6 @@ config/local
 # downloads (shellcheck/bats binaries) — not part of the project.
 wsl-test/
 .tmp-tools/
+
+# Website toolchain (web/ is built into docs/ with Vite)
+web/node_modules/

@@ -16,54 +16,177 @@ Diagnose the environment: dependencies, sources, config and conflicts.
 Usage: u-doctor [OPTIONS]
 
 Options:
+  --fix          Interactive first-run wizard: create/tune the config,
+                 check PATH and offer a starter profile
   -V, --version  Show version information
   -h, --help     Show this help message
 EOF
 }
+
+set_config_key() {
+    local key="$1" value="$2"
+    mkdir -p "$(dirname "$UI_CONFIG_FILE")"
+    if [[ ! -f "$UI_CONFIG_FILE" ]]; then
+        printf '[options]\n' > "$UI_CONFIG_FILE"
+    fi
+    if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$UI_CONFIG_FILE" 2>/dev/null; then
+        sed -i -E "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = ${value}|" "$UI_CONFIG_FILE"
+    else
+        printf '%s = %s\n' "$key" "$value" >> "$UI_CONFIG_FILE"
+    fi
+}
+
+write_default_config() {
+    mkdir -p "$(dirname "$UI_CONFIG_FILE")"
+    if [[ -f "$UI_CONFIG_FILE" ]]; then
+        ui_info "Config already exists: ${UI_CONFIG_FILE}"
+        return 0
+    fi
+    cat > "$UI_CONFIG_FILE" <<'CONF'
+[options]
+aur_build_dir = ~/.local/share/u-install/aur
+auto_yes = false
+prefer_source = auto
+colors = true
+log_level = info
+cleanup_after_build = false
+nix_channel = nixpkgs
+aur_security_check = true
+auto_update_check = true
+update_check_interval_days = 7
+CONF
+    ui_ok "Created default config: ${UI_CONFIG_FILE}"
+}
+
+wizard() {
+    ui_info "=== Setup wizard ==="
+
+    # 1. Config file
+    write_default_config
+
+    # 2. prefer_source
+    printf "\n  Which source should u-install prefer?\n"
+    printf "    1) auto     - try native, then Nix, then AUR (default)\n"
+    printf "    2) native   - system package manager only\n"
+    printf "    3) nix      - Nix only\n"
+    printf "    4) aur      - AUR only (Arch)\n"
+    printf "  Choice [1-4, default 1]: "
+    local pick; read -r pick || pick=1
+    case "$pick" in
+        2) set_config_key prefer_source native ;;
+        3) set_config_key prefer_source nix ;;
+        4) set_config_key prefer_source aur ;;
+        *) set_config_key prefer_source auto ;;
+    esac
+
+    # 3. Update check
+    printf "\n  Check for u-install updates in the background? [Y/n]: "
+    local upd; read -r upd || upd=""
+    case "$upd" in
+        [Nn]*)
+            set_config_key auto_update_check false
+            ;;
+        *)
+            set_config_key auto_update_check true
+            printf "  Check interval in days [7]: "
+            local days; read -r days || days=""
+            [[ "$days" =~ ^[0-9]+$ ]] || days=7
+            set_config_key update_check_interval_days "$days"
+            ;;
+    esac
+
+    # 4. PATH
+    if [[ ":$PATH:" == *":${UI_BIN_DIR}:"* ]]; then
+        printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s is on PATH\n" "$UI_BIN_DIR"
+    else
+        printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} %s is NOT on PATH\n" "$UI_BIN_DIR"
+        printf "  Add it to ~/.bashrc now? [Y/n]: "
+        local addp; read -r addp || addp=""
+        case "$addp" in
+            [Nn]*) ui_info "Skipped; add ${UI_BIN_DIR} to PATH manually." ;;
+            *)
+                touch "$HOME/.bashrc"
+                # $PATH must land in .bashrc literally, hence the single quotes.
+                # shellcheck disable=SC2016
+                printf '\n# u-install PATH\nexport PATH="%s:$PATH"\n' "$UI_BIN_DIR" >> "$HOME/.bashrc"
+                ui_ok "Added to ~/.bashrc (takes effect in a new terminal)"
+                ;;
+        esac
+    fi
+
+    # 5. Starter profile
+    if [[ "$(ui_db_count)" -eq 0 ]] && [[ -f "${UI_DATA_DIR}/profiles/dev-tools.txt" ]]; then
+        printf "\n  Install the @dev-tools starter profile\n"
+        printf "  (git, neovim, ripgrep, fd, bat, htop, tmux)? [y/N]: "
+        local dev; read -r dev || dev=""
+        case "$dev" in
+            [Yy]*)
+                "${UI_BIN_DIR}/u-install" "@dev-tools" || ui_warn "Profile installation had failures"
+                ;;
+            *) ui_info "Skipped. Run 'u-install @dev-tools' anytime." ;;
+        esac
+    fi
+
+    ui_ok "Setup complete. Reloading config..."
+    ui_parse_config
+}
+
 main() {
+    local fix_mode=0
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
             -V|--version) ui_print_version; exit 0 ;;
+            --fix) fix_mode=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
         esac
     done
+
+    if [[ "$fix_mode" -eq 1 ]]; then
+        if [[ ! -t 0 ]]; then
+            ui_err "--fix requires an interactive terminal (stdin is not a tty)"
+            exit 1
+        fi
+        wizard
+    fi
+
     ui_info "=== Doctor ==="; local issues=0
     printf "\n[Dependencies]\n"
     for cmd in bash curl git; do
-        command -v "$cmd" >/dev/null 2>&1 && printf "  [OK] %s\n" "$cmd" || { printf "  [FAIL] %s missing\n" "$cmd"; issues=$((issues+1)); }
+        command -v "$cmd" >/dev/null 2>&1 && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s\n" "$cmd" || { printf "  ${UI_RED}${UI_G_FAIL}${UI_NC} %s missing\n" "$cmd"; issues=$((issues+1)); }
     done
-    if command -v sudo >/dev/null 2>&1 || command -v doas >/dev/null 2>&1; then printf "  [OK] sudo/doas available\n"; else printf "  [WARN] No sudo/doas\n"; issues=$((issues+1)); fi
+    if command -v sudo >/dev/null 2>&1 || command -v doas >/dev/null 2>&1; then printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} sudo/doas available\n"; else printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} No sudo/doas\n"; issues=$((issues+1)); fi
     printf "\n[System]\n"
     local distro; distro=$(ui_detect_distro)
     printf "  Distribution: %s\n" "$distro"
-    [[ "$distro" == "unknown" ]] && { printf "  [WARN] Unknown distro\n"; issues=$((issues+1)); }
+    [[ "$distro" == "unknown" ]] && { printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} Unknown distro\n"; issues=$((issues+1)); }
     printf "\n[Nix]\n"
-    ui_has_nix && printf "  [OK] Nix: %s\n" "$(nix-env --version 2>/dev/null || echo unknown)" || printf "  [INFO] Nix not installed\n"
+    ui_has_nix && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} Nix: %s\n" "$(nix-env --version 2>/dev/null || echo unknown)" || printf "  ${UI_G_INFO} Nix not installed\n"
     printf "\n[AUR]\n"
     if ui_is_arch; then
-        printf "  [OK] Arch-based\n"
-        command -v makepkg >/dev/null 2>&1 && printf "  [OK] makepkg\n" || { printf "  [FAIL] makepkg missing\n"; issues=$((issues+1)); }
-        command -v git >/dev/null 2>&1 && printf "  [OK] git\n" || { printf "  [FAIL] git missing\n"; issues=$((issues+1)); }
+        printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} Arch-based\n"
+        command -v makepkg >/dev/null 2>&1 && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} makepkg\n" || { printf "  ${UI_RED}${UI_G_FAIL}${UI_NC} makepkg missing\n"; issues=$((issues+1)); }
+        command -v git >/dev/null 2>&1 && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} git\n" || { printf "  ${UI_RED}${UI_G_FAIL}${UI_NC} git missing\n"; issues=$((issues+1)); }
     else
-        printf "  [INFO] Not Arch-based\n"
+        printf "  ${UI_G_INFO} Not Arch-based\n"
     fi
     printf "\n[Directories]\n"
     for d in "$UI_CONFIG_DIR" "$UI_DATA_DIR"; do
-        [[ -d "$d" && -w "$d" ]] && printf "  [OK] %s\n" "$d" || printf "  [INFO] %s not ready\n" "$d"
+        [[ -d "$d" && -w "$d" ]] && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s\n" "$d" || printf "  ${UI_G_INFO} %s not ready\n" "$d"
     done
     printf "\n[Database]\n"
-    [[ -f "$UI_DB" ]] && printf "  [OK] %s packages tracked\n" "$(ui_db_count)" || printf "  [INFO] DB not initialized\n"
+    [[ -f "$UI_DB" ]] && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} %s packages tracked\n" "$(ui_db_count)" || printf "  ${UI_G_INFO} DB not initialized\n"
     printf "\n[Config]\n"
-    [[ -f "$UI_CONFIG_FILE" ]] && printf "  [OK] Config found\n" || { printf "  [WARN] Config missing\n"; issues=$((issues+1)); }
+    [[ -f "$UI_CONFIG_FILE" ]] && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} Config found\n" || { printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} Config missing (run: u-doctor --fix)\n"; issues=$((issues+1)); }
     printf "\n[AUR Health]\n"
     if ui_is_arch && [[ -d "${UI_AUR_DIR}" ]]; then
         local out=0
         for p in "${UI_AUR_DIR}"/*; do
             [[ -d "$p" ]] || continue
             local pkg; pkg=$(basename "$p")
-            [[ "$(ui_aur_check_updates "$pkg")" == "outdated" ]] && { printf "  [WARN] Outdated: %s\n" "$pkg"; out=$((out+1)); }
+            [[ "$(ui_aur_check_updates "$pkg")" == "outdated" ]] && { printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} Outdated: %s\n" "$pkg"; out=$((out+1)); }
         done
-        [[ $out -eq 0 ]] && printf "  [OK] All AUR packages up to date\n"
+        [[ $out -eq 0 ]] && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} All AUR packages up to date\n"
     fi
     printf "\n[Conflicts]\n"
     local conflicts=0
@@ -72,9 +195,9 @@ main() {
         local other=""
         [[ "$src" == "native" && $(ui_has_nix && nix-env -q "$pkg" >/dev/null 2>&1 && echo 1) ]] && other="nix"
         [[ "$src" == "nix" ]] && case "$(ui_detect_distro)" in arch) pacman -Q "$pkg" >/dev/null 2>&1 && other="native" ;; debian) dpkg -l "$pkg" >/dev/null 2>&1 && other="native" ;; fedora|yum) rpm -q "$pkg" >/dev/null 2>&1 && other="native" ;; esac
-        [[ -n "$other" ]] && { printf "  [WARN] '%s' in %s and %s\n" "$pkg" "$src" "$other"; conflicts=$((conflicts+1)); }
+        [[ -n "$other" ]] && { printf "  ${UI_YELLOW}${UI_G_WARN}${UI_NC} '%s' in %s and %s\n" "$pkg" "$src" "$other"; conflicts=$((conflicts+1)); }
     done < <(ui_db_list)
-    [[ $conflicts -eq 0 ]] && printf "  [OK] No conflicts\n"
+    [[ $conflicts -eq 0 ]] && printf "  ${UI_GREEN}${UI_G_OK}${UI_NC} No conflicts\n"
     printf "\n[Summary]\n"
     [[ $issues -eq 0 ]] && ui_ok "Healthy." || ui_warn "${issues} issue(s) found."
 }

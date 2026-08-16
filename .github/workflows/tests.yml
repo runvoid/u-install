@@ -19,5 +19,23 @@ jobs:
       - name: Run bats
         run: bats tests/
 
-      - name: Check docs are up to date
-        run: bash tools/gen-docs.sh --check
+      - name: Regenerate command reference data
+        run: bash tools/gen-docs.sh
+
+      - name: Check command data is in sync
+        run: git diff --exit-code web/src/data/commands.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build website (into docs/)
+        run: |
+          npm ci
+          npm run build
+        working-directory: web
+
+      - name: Check docs/ build is committed and in sync
+        run: git diff --exit-code docs

@@ -86,10 +86,10 @@ main() {
     # Background update check (non-blocking), only for real operations
     (ui_check_for_updates >/dev/null 2>&1 &)
 
-    local total=${#packages[@]} idx=0
+    local total=${#packages[@]} idx=0 ok=0 skip=0 fail=0
     for pkg in "${packages[@]}"; do
         idx=$((idx+1))
-        if [[ "$pkg" == @* ]]; then 
+        if [[ "$pkg" == @* ]]; then
             if [[ "$dry_run" -eq 1 ]]; then
                 ui_info "[DRY-RUN] Would install group: ${pkg#@}"
             else
@@ -123,50 +123,87 @@ main() {
             ui_warn "'${pkg}' is a critical system package"
             if ! ui_confirm_critical "Really install critical package '${pkg}'?"; then
                 ui_info "Skipped ${pkg}"
+                skip=$((skip+1))
                 continue
             fi
         fi
 
         local esrc; esrc=$(ui_db_get_source "$pkg")
-        [[ -n "$esrc" ]] && { ui_warn "Previously installed via ${esrc}"; ui_confirm "Reinstall?" "$auto_yes" || continue; }
-
-        local installed=0
-        if [[ $force_native -eq 1 ]]; then
-            ui_native_search "$pkg" && { ui_confirm "Install via native?" "$auto_yes" && ui_native_install "$pkg" "$pver" && installed=1; } || ui_err "Not found in native"
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; }; continue
-        fi
-        if [[ $force_nix -eq 1 ]]; then
-            if ui_ensure_nix; then
-                if ui_nix_search "$pkg"; then
-                    ui_confirm "Install via Nix?" "$auto_yes" && ui_nix_install "$pkg" && installed=1
-                    [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; }
-                else
-                    ui_err "Not found in nixpkgs"
-                fi
-            fi
+        if [[ -n "$esrc" ]] && ! ui_confirm "Reinstall?" "$auto_yes"; then
+            ui_info "Skipped ${pkg} (already installed via ${esrc})"
+            skip=$((skip+1))
             continue
         fi
-        if [[ $force_aur -eq 1 ]]; then
-            ui_aur_search "$pkg" && { ui_confirm "Install via AUR?" "$auto_yes" && ui_aur_install "$pkg" && installed=1; } || ui_err "Not found in AUR"
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "aur"; ui_ok "Installed via AUR"; }; continue
+
+        local installed=0 src_used="" declined=0 install_err=0
+        if [[ $force_native -eq 1 ]]; then
+            if ui_native_search "$pkg"; then
+                ui_confirm "Install via native?" "$auto_yes" \
+                    && { ui_native_install "$pkg" "$pver" && installed=1 && src_used="native" || install_err=1; } \
+                    || declined=1
+            else
+                ui_err "Not found in native"
+                fail=$((fail+1))
+                continue
+            fi
+        elif [[ $force_nix -eq 1 ]]; then
+            if ui_ensure_nix; then
+                if ui_nix_search "$pkg"; then
+                    ui_confirm "Install via Nix?" "$auto_yes" \
+                        && { ui_nix_install "$pkg" && installed=1 && src_used="nix" || install_err=1; } \
+                        || declined=1
+                else
+                    ui_err "Not found in nixpkgs"
+                    fail=$((fail+1))
+                    continue
+                fi
+            fi
+        elif [[ $force_aur -eq 1 ]]; then
+            if ui_aur_search "$pkg"; then
+                ui_confirm "Install via AUR?" "$auto_yes" \
+                    && { ui_aur_install "$pkg" && installed=1 && src_used="aur" || install_err=1; } \
+                    || declined=1
+            else
+                ui_err "Not found in AUR"
+                fail=$((fail+1))
+                continue
+            fi
+        else
+            local try_native=1 try_nix=1 try_aur=1
+            case "$UI_PREFER_SOURCE" in native) try_nix=0; try_aur=0 ;; nix) try_native=0; try_aur=0 ;; aur) try_native=0; try_nix=0 ;; esac
+
+            if [[ $try_native -eq 1 ]] && ui_native_search "$pkg"; then
+                ui_confirm "Found in native. Install?" "$auto_yes" \
+                    && { ui_native_install "$pkg" "$pver" && installed=1 && src_used="native" || install_err=1; } \
+                    || declined=1
+            elif [[ $try_nix -eq 1 ]] && ui_nix_search "$pkg"; then
+                ui_confirm "Found in nixpkgs. Install?" "$auto_yes" \
+                    && { ui_nix_install "$pkg" && installed=1 && src_used="nix" || install_err=1; } \
+                    || declined=1
+            elif [[ $try_aur -eq 1 && "$distro" == "arch" ]] && ui_aur_search "$pkg"; then
+                ui_confirm "Found in AUR. Install?" "$auto_yes" \
+                    && { ui_aur_install "$pkg" && installed=1 && src_used="aur" || install_err=1; } \
+                    || declined=1
+            fi
         fi
 
-        local try_native=1 try_nix=1 try_aur=1
-        case "$UI_PREFER_SOURCE" in native) try_nix=0; try_aur=0 ;; nix) try_native=0; try_aur=0 ;; aur) try_native=0; try_nix=0 ;; esac
-
-        if [[ $try_native -eq 1 ]] && ui_native_search "$pkg"; then
-            ui_confirm "Found in native. Install?" "$auto_yes" && ui_native_install "$pkg" "$pver" && installed=1
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "native"; ui_ok "Installed via native"; continue; }
+        if [[ $installed -eq 1 ]]; then
+            ui_db_add "$pkg" "$src_used"
+            ui_ok "Installed via ${src_used}"
+            ok=$((ok+1))
+        elif [[ "$declined" -eq 1 && "$install_err" -eq 0 ]]; then
+            ui_info "Skipped ${pkg}"
+            skip=$((skip+1))
+        else
+            ui_err "Could not install '${pkg}'"
+            fail=$((fail+1))
         fi
-        if [[ $try_nix -eq 1 ]] && ui_nix_search "$pkg"; then
-            ui_confirm "Found in nixpkgs. Install?" "$auto_yes" && ui_nix_install "$pkg" && installed=1
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "nix"; ui_ok "Installed via Nix"; continue; }
-        fi
-        if [[ $try_aur -eq 1 && "$distro" == "arch" ]] && ui_aur_search "$pkg"; then
-            ui_confirm "Found in AUR. Install?" "$auto_yes" && ui_aur_install "$pkg" && installed=1
-            [[ $installed -eq 1 ]] && { ui_db_add "$pkg" "aur"; ui_ok "Installed via AUR"; continue; }
-        fi
-        [[ $installed -eq 0 ]] && ui_err "Could not install '${pkg}'"
     done
+    ui_progress_end
+
+    if [[ "$total" -gt 1 || "$fail" -gt 0 ]]; then
+        printf "\n  ${UI_GREEN}${UI_G_OK}${UI_NC} %d installed ${UI_G_INFO} ${UI_DIM}${UI_G_SKIP}${UI_NC} %d skipped ${UI_G_INFO} ${UI_RED}${UI_G_FAIL}${UI_NC} %d failed\n" "$ok" "$skip" "$fail"
+    fi
+    if [[ "$fail" -gt 0 ]]; then exit 1; fi
 }
 main "$@"

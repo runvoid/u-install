@@ -202,6 +202,28 @@ load test_helper
     [ "$status" -eq 0 ]
 }
 
+@test "ui_setup_colors: colors off when piped, glyphs always defined" {
+    ui_setup_colors
+    [ -z "$UI_RED" ]
+    [ -z "$UI_GREEN" ]
+    [ -z "$UI_DIM" ]
+    [ -n "$UI_G_OK" ]
+    [ -n "$UI_G_FAIL" ]
+    [ -n "$UI_G_WARN" ]
+}
+
+@test "ui_fmt_status is plain text when colors are off" {
+    ui_setup_colors
+    run ui_fmt_status "available"
+    [ "$output" = "available" ]
+    run ui_fmt_status "UPDATE"
+    [ "$output" = "UPDATE" ]
+    run ui_fmt_status "not found"
+    [ "$output" = "not found" ]
+    run ui_fmt_status "Arch only"
+    [ "$output" = "Arch only" ]
+}
+
 
 @test "ui_import_apply_config rewrites the options file" {
     uf="${BATS_TEST_TMPDIR}/in.u"
