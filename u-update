@@ -72,11 +72,17 @@ main() {
                 ui_info "[DRY-RUN] Would update Nix channels and upgrade packages"
             else
                 nix-channel --update
+                local ntotal; ntotal="$(ui_count_lines "$nix_pkgs")"
+                local nidx=0
                 while IFS= read -r pkg; do
                     [[ -z "$pkg" ]] && continue
-                    ui_is_critical "$pkg" && { ui_warn "Skip critical: ${pkg}"; continue; }
+                    nidx=$((nidx+1))
+                    ui_progress "$nidx" "$ntotal" "updating ${pkg}"
+                    local base; base=$(ui_nix_strip_version "$pkg")
+                    ui_is_critical "$base" && { ui_warn "Skip critical: ${pkg}"; continue; }
                     ui_info "Updating: ${pkg}"; ui_nix_update_pkg "$pkg" || ui_warn "Failed: ${pkg}"
                 done <<< "$nix_pkgs"
+                ui_progress_end
             fi
         fi
     fi

@@ -16,42 +16,90 @@ Search for a package across native, Nix and AUR sources.
 Usage: u-search [OPTIONS] <PACKAGE...>
 
 Options:
+  --no-cache     Skip the search cache and refresh results
   -V, --version  Show version information
   -h, --help  Show this help message
 EOF
 }
+# probe one source with caching: prints "version|status"
+probe_cached() {
+    local source="$1" pkg="$2" row ver status
+    if [[ "$use_cache" -eq 1 ]]; then
+        row="$(ui_search_cached "$source" "$pkg" 2>/dev/null || true)"
+    else
+        row=""
+    fi
+    if [[ -n "$row" ]]; then
+        printf '%s' "$row"
+        return 0
+    fi
+    ver="" status="not found"
+    case "$source" in
+        native)
+            if ui_native_search "$pkg" 2>/dev/null; then
+                ver="$(ui_native_search_version "$pkg")"
+                status="available"
+            fi
+            ;;
+        nix)
+            if ui_has_nix && ui_nix_search "$pkg" 2>/dev/null; then
+                ver="$(ui_nix_search_version "$pkg")"
+                status="available"
+            fi
+            ;;
+        aur)
+            if ui_aur_search "$pkg" 2>/dev/null; then
+                ver="$(ui_aur_search_version "$pkg")"
+                status="available"
+            fi
+            ;;
+    esac
+    if [[ "$use_cache" -eq 1 ]]; then
+        ui_search_cache_write "$source" "$pkg" "${ver}|${status}"
+    fi
+    printf '%s|%s' "$ver" "$status"
+}
 main() {
-    local packages=()
-    for arg in "$@"; do [[ "$arg" == "-h" || "$arg" == "--help" ]] && { usage; exit 0; }; [[ "$arg" == "-V" || "$arg" == "--version" ]] && { ui_print_version; exit 0; }; [[ "$arg" == -* ]] || packages+=("$arg"); done
+    local packages=() use_cache=1
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            --no-cache) use_cache=0 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     local distro; distro=$(ui_detect_distro)
+    local total=${#packages[@]} idx=0
     for pkg in "${packages[@]}"; do
+        idx=$((idx+1))
+        ui_valid_pkg_name "$pkg" || { ui_err "Invalid package name: '${pkg}'"; exit 1; }
+        ui_progress "$idx" "$total" "searching ${pkg}"
+        ui_progress_break
         ui_info "Searching: ${pkg}"
         printf "\n  %-10s %-20s %-15s %s\n" "SOURCE" "PACKAGE" "VERSION" "STATUS"
         printf "  %-10s %-20s %-15s %s\n" "----------" "--------------------" "---------------" "----------"
         # Native
-        local nv="" ns="not found"
-        if ui_native_search "$pkg" 2>/dev/null; then
-            nv="$(ui_native_search_version "$pkg")"
-            ns="available"
-        fi
+        local row nv ns
+        row="$(probe_cached native "$pkg")"
+        nv="${row%%|*}"; ns="${row##*|}"
         printf "  %-10s %-20s %-15s %s\n" "native" "$pkg" "${nv:-""}" "$ns"
         # Nix
         local nxv="" nxs="not found"
-        if ui_has_nix && ui_nix_search "$pkg" 2>/dev/null; then
-            nxv="$(ui_nix_search_version "$pkg")"
-            nxs="available"
-        elif ! ui_has_nix; then
+        if ui_has_nix; then
+            row="$(probe_cached nix "$pkg")"
+            nxv="${row%%|*}"; nxs="${row##*|}"
+        else
             nxs="Nix not installed"
         fi
         printf "  %-10s %-20s %-15s %s\n" "nix" "$pkg" "${nxv:-""}" "$nxs"
         # AUR
         local av="" as="not found"
         if [[ "$distro" == "arch" ]]; then
-            if ui_aur_search "$pkg" 2>/dev/null; then
-                av="$(ui_aur_search_version "$pkg")"
-                as="available"
-            fi
+            row="$(probe_cached aur "$pkg")"
+            av="${row%%|*}"; as="${row##*|}"
         else
             as="Arch only"
         fi

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-history ${UI_VERSION}
+
+Show the journal of u-install actions (installs, removals, upgrades).
+
+Usage: u-history [OPTIONS] [N]
+
+Arguments:
+  N              Show the last N entries (default: 20)
+
+Options:
+  -a, --all      Show the full journal
+  -p, --pkg PKG  Show only entries for PKG
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+main() {
+    local n=20 pkg="" want_pkg=0
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -a|--all) n=100000 ;;
+            -p|--pkg) want_pkg=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *)
+                if [[ "$want_pkg" -eq 1 ]]; then pkg="$arg"; want_pkg=0; else n="$arg"; fi
+                ;;
+        esac
+    done
+    [[ "$n" =~ ^[0-9]+$ ]] || { ui_err "N must be a number: ${n}"; exit 1; }
+
+    if ! [[ -f "$UI_HISTORY_FILE" ]]; then
+        ui_info "No history yet."
+        exit 0
+    fi
+
+    printf "\n  %-19s %-9s %-24s %s\n" "DATE" "ACTION" "PACKAGE" "SOURCE"
+    printf "  %-19s %-9s %-24s %s\n" "-------------------" "---------" "------------------------" "--------"
+    if [[ -n "$pkg" ]]; then
+        awk -F'|' -v p="$pkg" '$3 == p' "$UI_HISTORY_FILE" | tail -n "$n" | awk -F'|' '{printf "  %-19s %-9s %-24s %s\n", $1, $2, $3, $4}'
+    else
+        tail -n "$n" "$UI_HISTORY_FILE" | awk -F'|' '{printf "  %-19s %-9s %-24s %s\n", $1, $2, $3, $4}'
+    fi
+    printf "\n"
+}
+main "$@"

@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-upgrade ${UI_VERSION}
+
+Upgrade a single tracked package using its recorded source (native, Nix or AUR).
+
+Usage: u-upgrade [OPTIONS] <PACKAGE...>
+
+Options:
+  --dry-run      Show what would be upgraded without making changes
+  -y, --yes      Assume yes to all prompts
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+upgrade_native_cmd() {
+    local pkg="$1" distro; distro=$(ui_detect_distro)
+    case "$distro" in
+        arch)      echo "pacman -S --needed --noconfirm ${pkg}" ;;
+        debian)    echo "apt-get install --only-upgrade -y ${pkg}" ;;
+        fedora|yum) echo "dnf upgrade -y ${pkg}" ;;
+        suse)      echo "zypper update -y ${pkg}" ;;
+        alpine)    echo "apk add ${pkg}" ;;
+        void)      echo "xbps-install -y ${pkg}" ;;
+        gentoo)    echo "emerge -u ${pkg}" ;;
+        solus)     echo "eopkg upgrade ${pkg}" ;;
+        *)         echo "" ;;
+    esac
+}
+upgrade_native() {
+    local pkg="$1" distro; distro=$(ui_detect_distro)
+    case "$distro" in
+        arch)      ui_priv pacman -S --needed --noconfirm "$pkg" ;;
+        debian)    ui_priv apt-get install --only-upgrade -y "$pkg" ;;
+        fedora|yum) if command -v dnf >/dev/null 2>&1; then ui_priv dnf upgrade -y "$pkg"; else ui_priv yum update -y "$pkg"; fi ;;
+        suse)      ui_priv zypper update -y "$pkg" ;;
+        alpine)    ui_priv apk add "$pkg" ;;
+        void)      ui_priv xbps-install -y "$pkg" ;;
+        gentoo)    ui_priv emerge -u "$pkg" ;;
+        solus)     ui_priv eopkg upgrade "$pkg" ;;
+        *)         ui_warn "Single-package upgrade not supported on '${distro}'; reinstalling instead"; ui_native_install "$pkg" ;;
+    esac
+}
+main() {
+    local packages=() auto_yes=0 dry_run=0
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -y|--yes) auto_yes=1 ;;
+            --dry-run) dry_run=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+            *) packages+=("$arg") ;;
+        esac
+    done
+    [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
+    [[ "$dry_run" -eq 1 ]] && ui_info "=== DRY RUN (no changes will be made) ==="
+
+    local total=${#packages[@]} idx=0 rc=0
+    for pkg in "${packages[@]}"; do
+        idx=$((idx+1))
+        ui_valid_pkg_name "$pkg" || { ui_err "Invalid package name: '${pkg}'"; exit 1; }
+        ui_progress "$idx" "$total" "upgrading ${pkg}"
+        local src; src="$(ui_db_get_source "$pkg")"
+        if [[ -z "$src" ]]; then
+            ui_err "'${pkg}' is not tracked by u-install (use u-install first, or u-update for everything)"
+            rc=1
+            continue
+        fi
+        if [[ "$dry_run" -eq 1 ]]; then
+            case "$src" in
+                native) ui_info "[DRY-RUN] Would run: $(upgrade_native_cmd "$pkg")" ;;
+                nix)    ui_info "[DRY-RUN] Would run: nix-env -u ${pkg}" ;;
+                aur)    ui_info "[DRY-RUN] Would run: git pull + makepkg -si in ${UI_AUR_DIR}/${pkg}" ;;
+                *)      ui_info "[DRY-RUN] Unknown source '${src}'" ;;
+            esac
+            continue
+        fi
+        if ! ui_confirm "Upgrade '${pkg}' via ${src}?" "$auto_yes"; then
+            ui_info "Skipped ${pkg}"
+            continue
+        fi
+        case "$src" in
+            native) upgrade_native "$pkg" && { ui_ok "Upgraded ${pkg} via native"; ui_history_log update "$pkg" "native"; } ;;
+            nix)    ui_nix_update_pkg "$pkg" && { ui_ok "Upgraded ${pkg} via Nix"; ui_history_log update "$pkg" "nix"; } ;;
+            aur)    ui_aur_update "$pkg" && { ui_ok "Upgraded ${pkg} via AUR"; ui_history_log update "$pkg" "aur"; } ;;
+            *)      ui_err "Unknown source: ${src}"; rc=1 ;;
+        esac
+    done
+    ui_progress_end
+    exit $rc
+}
+main "$@"

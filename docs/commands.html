@@ -38,65 +38,301 @@
     </table>
 
     <h2>Core Commands</h2>
+    <p>The reference below is generated from each command's <code>--help</code>
+    output by <code>tools/gen-docs.sh</code> (enforced in CI), so it can never
+    go stale.</p>
     <div class="cmd-list">
+<!-- AUTOGEN:COMMANDS:START -->
       <div class="cmd-item">
-        <h3><code>u-install &lt;pkg&gt;</code></h3>
-        <p>Install a package. Auto-detects native repo, Nix, or AUR.</p>
-        <div class="code-block"><pre><code>u-install firefox
-u-install --nix nodejs
-u-install --aur visual-studio-code-bin
-u-install @dev-tools</code></pre></div>
+        <h3><code>u-install</code></h3>
+        <p>Install packages from the native package manager, Nix, or the AUR, auto-detecting the best available source.</p>
+        <div class="code-block"><pre><code>u-install 1.4.0
+
+Install packages from the native package manager, Nix, or the AUR,
+auto-detecting the best available source.
+
+Usage: u-install [OPTIONS] &lt;PACKAGE...&gt;
+         u-install @&lt;GROUP&gt;
+         u-install --profile &lt;NAME&gt;
+
+Options:
+  --native        Force native package manager
+  --nix           Force Nix
+  --aur           Force AUR (Arch-based only)
+  --profile       Install packages from a profile list
+  --self-update   Update u-install itself
+  --dry-run       Show what would be installed without making changes
+  -y, --yes       Assume yes to all prompts
+  -V, --version   Show version information
+  -h, --help      Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
-        <h3><code>u-uninstall &lt;pkg&gt;</code></h3>
-        <p>Remove a tracked package.</p>
-        <div class="code-block"><pre><code>u-uninstall firefox</code></pre></div>
+        <h3><code>u-uninstall</code></h3>
+        <p>Remove packages tracked by u-install, using their recorded source.</p>
+        <div class="code-block"><pre><code>u-uninstall 1.4.0
+
+Remove packages tracked by u-install, using their recorded source.
+
+Usage: u-uninstall [OPTIONS] &lt;PACKAGE...&gt;
+
+Options:
+  -y, --yes      Assume yes to all prompts
+  --force        Allow removing critical system packages
+  --dry-run      Show what would be removed without making changes
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
         <h3><code>u-update</code></h3>
-        <p>Update system, Nix, and AUR packages.</p>
-        <div class="code-block"><pre><code>u-update</code></pre></div>
+        <p>Update system packages, Nix packages, cached AUR builds, and u-install itself.</p>
+        <div class="code-block"><pre><code>u-update 1.4.0
+
+Update system packages, Nix packages, cached AUR builds, and u-install itself.
+
+Usage: u-update [OPTIONS]
+
+Options:
+  --system       Update only system packages
+  --nix          Update only Nix packages
+  --aur          Update only AUR packages
+  --self         Update only u-install itself
+  --dry-run      Show what would be updated without making changes
+  -y, --yes      Assume yes to all prompts
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
-        <h3><code>u-search &lt;pkg&gt;</code></h3>
-        <p>Search a package across all sources.</p>
-        <div class="code-block"><pre><code>u-search neovim</code></pre></div>
+        <h3><code>u-upgrade</code></h3>
+        <p>Upgrade a single tracked package using its recorded source (native, Nix or AUR).</p>
+        <div class="code-block"><pre><code>u-upgrade 1.4.0
+
+Upgrade a single tracked package using its recorded source (native, Nix or AUR).
+
+Usage: u-upgrade [OPTIONS] &lt;PACKAGE...&gt;
+
+Options:
+  --dry-run      Show what would be upgraded without making changes
+  -y, --yes      Assume yes to all prompts
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-search</code></h3>
+        <p>Search for a package across native, Nix and AUR sources.</p>
+        <div class="code-block"><pre><code>u-search 1.4.0
+
+Search for a package across native, Nix and AUR sources.
+
+Usage: u-search [OPTIONS] &lt;PACKAGE...&gt;
+
+Options:
+  --no-cache     Skip the search cache and refresh results
+  -V, --version  Show version information
+  -h, --help  Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-peek</code></h3>
+        <p>Inspect AUR package metadata without cloning or building it. Helps you decide whether an AUR package is worth touching at all.</p>
+        <div class="code-block"><pre><code>u-peek 1.4.0
+
+Inspect AUR package metadata without cloning or building it.
+Helps you decide whether an AUR package is worth touching at all.
+
+Usage: u-peek [OPTIONS] &lt;PACKAGE...&gt;
+
+Options:
+  -V, --version  Show version information
+  -h, --help  Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
         <h3><code>u-list</code></h3>
-        <p>List packages tracked in the local database.</p>
-        <div class="code-block"><pre><code>u-list
-u-list --native
-u-list --nix
-u-list --aur</code></pre></div>
+        <p>List packages tracked by u-install (from its database).</p>
+        <div class="code-block"><pre><code>u-list 1.4.0
+
+List packages tracked by u-install (from its database).
+
+Usage: u-list [OPTIONS]
+
+Options:
+  --native       Show only native packages
+  --nix          Show only Nix packages
+  --aur          Show only AUR packages
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
-        <h3><code>u-peek &lt;pkg&gt;</code></h3>
-        <p>Inspect AUR metadata without cloning or building.</p>
-        <div class="code-block"><pre><code>u-peek brave-bin</code></pre></div>
+        <h3><code>u-outdated</code></h3>
+        <p>Compare installed versions of tracked packages against their sources and show which ones have an update available.</p>
+        <div class="code-block"><pre><code>u-outdated 1.4.0
+
+Compare installed versions of tracked packages against their sources and
+show which ones have an update available.
+
+Usage: u-outdated [OPTIONS]
+
+Options:
+  --native       Check only native packages
+  --nix          Check only Nix packages
+  --aur          Check only AUR packages
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-info</code></h3>
+        <p>Show detailed information about a package tracked by u-install.</p>
+        <div class="code-block"><pre><code>u-info 1.4.0
+
+Show detailed information about a package tracked by u-install.
+
+Usage: u-info [OPTIONS] &lt;PACKAGE...&gt;
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-diff</code></h3>
+        <p>Compare two .u snapshot files to see differences in packages and versions.</p>
+        <div class="code-block"><pre><code>u-diff 1.4.0
+
+Compare two .u snapshot files to see differences in packages and versions.
+
+Usage: u-diff [OPTIONS] &lt;FILE1.u&gt; &lt;FILE2.u&gt;
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-sync</code></h3>
+        <p>Synchronize the current machine's packages with a .u snapshot file. Installs missing packages and optionally removes extras.</p>
+        <div class="code-block"><pre><code>u-sync 1.4.0
+
+Synchronize the current machine's packages with a .u snapshot file.
+Installs missing packages and optionally removes extras.
+
+Usage: u-sync [OPTIONS] &lt;FILE.u&gt;
+
+Options:
+  -y, --yes      Assume yes to all prompts
+  --dry-run      Show what would be synced without making changes
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-history</code></h3>
+        <p>Show the journal of u-install actions (installs, removals, upgrades).</p>
+        <div class="code-block"><pre><code>u-history 1.4.0
+
+Show the journal of u-install actions (installs, removals, upgrades).
+
+Usage: u-history [OPTIONS] [N]
+
+Arguments:
+  N              Show the last N entries (default: 20)
+
+Options:
+  -a, --all      Show the full journal
+  -p, --pkg PKG  Show only entries for PKG
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+      <div class="cmd-item">
+        <h3><code>u-clean</code></h3>
+        <p>Reclaim disk space: clear the search cache, cached AUR build directories, old Nix generations and native orphan packages. Shows what would be freed before touching anything.</p>
+        <div class="code-block"><pre><code>u-clean 1.4.0
+
+Reclaim disk space: clear the search cache, cached AUR build directories,
+old Nix generations and native orphan packages. Shows what would be freed
+before touching anything.
+
+Usage: u-clean [OPTIONS]
+
+Options:
+  --dry-run      Show what would be cleaned without making changes
+  -y, --yes      Assume yes to all prompts
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
         <h3><code>u-stats</code></h3>
-        <p>Show statistics about tracked packages.</p>
-        <div class="code-block"><pre><code>u-stats</code></pre></div>
+        <p>Show statistics about packages tracked by u-install.</p>
+        <div class="code-block"><pre><code>u-stats 1.4.0
+
+Show statistics about packages tracked by u-install.
+
+Usage: u-stats [OPTIONS]
+
+Options:
+  -V, --version  Show version information
+  -h, --help  Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
         <h3><code>u-doctor</code></h3>
-        <p>Diagnose the environment and configuration.</p>
-        <div class="code-block"><pre><code>u-doctor</code></pre></div>
+        <p>Diagnose the environment: dependencies, sources, config and conflicts.</p>
+        <div class="code-block"><pre><code>u-doctor 1.4.0
+
+Diagnose the environment: dependencies, sources, config and conflicts.
+
+Usage: u-doctor [OPTIONS]
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
-        <h3><code>u-export [file.u]</code></h3>
-        <p>Export config + package list to a portable .u file.</p>
-        <div class="code-block"><pre><code>u-export my-machine.u</code></pre></div>
+        <h3><code>u-export</code></h3>
+        <p>Export your u-install setup (installer config + tracked packages) to a portable .u file. Copy that file to another machine and run `u-import` to reproduce the same configuration and packages.</p>
+        <div class="code-block"><pre><code>u-export 1.4.0
+
+Export your u-install setup (installer config + tracked packages) to a
+portable .u file. Copy that file to another machine and run `u-import`
+to reproduce the same configuration and packages.
+
+Usage: u-export [OPTIONS] [FILE]
+
+Arguments:
+  FILE           Output file (default: configuration.u)
+
+Options:
+  -f, --force    Overwrite FILE without asking
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
       </div>
       <div class="cmd-item">
-        <h3><code>u-import &lt;file.u&gt;</code></h3>
-        <p>Restore config and packages from a .u file.</p>
-        <div class="code-block"><pre><code>u-import my-machine.u
-u-import --latest my-machine.u
-u-import --config-only my-machine.u</code></pre></div>
+        <h3><code>u-import</code></h3>
+        <p>Apply a .u file produced by `u-export`: restore the installer configuration and (re)install every package it lists. Use it to bring a fresh machine to the same state as an existing one.</p>
+        <div class="code-block"><pre><code>u-import 1.4.0
+
+Apply a .u file produced by `u-export`: restore the installer configuration
+and (re)install every package it lists. Use it to bring a fresh machine to the
+same state as an existing one.
+
+Usage: u-import [OPTIONS] &lt;FILE&gt;
+
+Options:
+  --config-only    Apply only the installer configuration
+  --packages-only  Install only the packages
+  --latest         Ignore pinned versions; install the latest available
+  -y, --yes        Assume yes to all prompts
+  -V, --version    Show version information
+  -h, --help       Show this help message</code></pre></div>
       </div>
+      <div class="cmd-item">
+        <h3><code>u-help</code></h3>
+        <p>Top-level entry point for the u-install toolkit: lists every u-* command. Run any command with --help for its own options.</p>
+        <div class="code-block"><pre><code>u-help 1.4.0
+
+Top-level entry point for the u-install toolkit: lists every u-* command.
+Run any command with --help for its own options.
+
+Usage: u-help [OPTIONS]
+
+Options:
+  -V, --version  Show version information
+  -h, --help     Show this help message</code></pre></div>
+      </div>
+<!-- AUTOGEN:COMMANDS:END -->
     </div>
   </div>
 </main>

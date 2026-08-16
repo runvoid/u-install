@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-outdated ${UI_VERSION}
+
+Compare installed versions of tracked packages against their sources and
+show which ones have an update available.
+
+Usage: u-outdated [OPTIONS]
+
+Options:
+  --native       Check only native packages
+  --nix          Check only Nix packages
+  --aur          Check only AUR packages
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+available_version() {
+    local pkg="$1" src="$2"
+    case "$src" in
+        native) ui_native_search_version "$pkg" ;;
+        nix)    ui_nix_search_version "$pkg" ;;
+        aur)    ui_aur_search_version "$pkg" ;;
+        *)      echo "" ;;
+    esac
+}
+main() {
+    local filter=""
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            --native) filter="native" ;;
+            --nix) filter="nix" ;;
+            --aur) filter="aur" ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+        esac
+    done
+
+    local total; total="$(ui_db_count)"
+    if [[ "$total" -eq 0 ]]; then
+        ui_info "No packages tracked yet. Install something with u-install first."
+        exit 0
+    fi
+
+    ui_info "=== Outdated packages ==="
+    printf "\n  %-24s %-8s %-18s %-18s %s\n" "PACKAGE" "SOURCE" "INSTALLED" "AVAILABLE" "STATUS"
+    printf "  %-24s %-8s %-18s %-18s %s\n" "------------------------" "--------" "------------------" "------------------" "----------"
+
+    local idx=0 outdated=0 unknown=0 checked=0
+    while IFS='|' read -r pkg src _; do
+        [[ -z "$pkg" ]] && continue
+        [[ -n "$filter" && "$src" != "$filter" ]] && continue
+        idx=$((idx+1))
+        ui_progress "$idx" "$total" "checking ${pkg}"
+        checked=$((checked+1))
+        local inst avail status
+        inst="$(ui_installed_version "$pkg" "$src")"
+        avail="$(available_version "$pkg" "$src")"
+        if [[ -n "$inst" && -n "$avail" ]]; then
+            if [[ "$inst" != "$avail" ]]; then
+                status="UPDATE"
+                outdated=$((outdated+1))
+            else
+                status="up to date"
+            fi
+        else
+            status="unknown"
+            unknown=$((unknown+1))
+        fi
+        ui_progress_break
+        printf "  %-24s %-8s %-18s %-18s %s\n" "$pkg" "$src" "${inst:-?}" "${avail:-?}" "$status"
+    done < <(ui_db_list)
+    ui_progress_end
+
+    printf "\n"
+    ui_ok "Checked ${checked}: ${outdated} update(s) available, ${unknown} unknown."
+    if [[ "$outdated" -gt 0 ]]; then
+        ui_info "Upgrade single packages with: u-upgrade <pkg>"
+    fi
+}
+main "$@"

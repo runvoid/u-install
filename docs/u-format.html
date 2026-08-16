@@ -32,16 +32,15 @@
     <h2>Structure</h2>
     <div class="code-block">
       <pre><code># u-install export
-# format: u2
+# format: u3
 
 [meta]
-version=1.2.1
-exported=2026-08-08
+version=1.4.0
+exported=2026-08-16
 hostname=my-pc
 sha256=abc123...
 
 [config]
-parallel_downloads = 3
 auto_yes = false
 prefer_source = auto
 
@@ -58,7 +57,7 @@ brave-bin|aur|1.60.0</code></pre>
       <li><code>version</code> — u-install version that created the file</li>
       <li><code>exported</code> — date of export</li>
       <li><code>hostname</code> — source machine name</li>
-      <li><code>sha256</code> — integrity checksum of the [packages] section</li>
+      <li><code>sha256</code> — integrity checksum of the [config] and [packages] sections (u3; older u2 signatures covered [packages] only and are reported as legacy)</li>
     </ul>
 
     <h3>[config]</h3>

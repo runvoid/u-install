@@ -18,3 +18,6 @@ jobs:
 
       - name: Run bats
         run: bats tests/
+
+      - name: Check docs are up to date
+        run: bash tools/gen-docs.sh --check

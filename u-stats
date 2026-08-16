@@ -44,8 +44,7 @@ main() {
         [[ -n "$heaviest" ]] && printf "  Heaviest Nix pkg:  %s (%s)\n" "$heaviest" "$(ui_human_size "$hsize")"
     fi
     printf "\n  Config file: ~/.config/u-install/u-install.conf\n"
-    printf "  Prefer source:     %s\n" "$UI_PREFER_SOURCE"
-    printf "  Parallel downloads: %s\n" "$UI_PARALLEL_DOWNLOADS"
+    printf "  Prefer source:       %s\n" "$UI_PREFER_SOURCE"
     printf "  Cleanup after build: %s\n" "$([[ "$UI_CLEANUP_AFTER_BUILD" -eq 1 ]] && echo "true" || echo "false")"
 }
 main "$@"

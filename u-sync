@@ -40,14 +40,25 @@ main() {
 
     local fmt; fmt="$(ui_uf_format "$file")"
     case "$fmt" in
-        "$UI_EXPORT_FORMAT"|u1) ;;
+        "$UI_EXPORT_FORMAT"|u2|u1) ;;
         *) ui_err "Unsupported .u format: ${fmt:-none}"; exit 1 ;;
+    esac
+
+    local vrc=0
+    ui_uf_verify "$file" || vrc=$?
+    case "$vrc" in
+        0) ui_ok "Integrity: sha256 checksum OK" ;;
+        2) ui_warn "Integrity: file is unsigned; skipping check" ;;
+        3) ui_warn "Integrity: legacy u2 signature covers [packages] but NOT [config]"
+           ui_confirm "Sync with this file anyway?" "$auto_yes" || exit 1 ;;
+        *) ui_err "Integrity: sha256 mismatch - the file may be corrupt or tampered with"
+           ui_confirm "Sync anyway?" "$auto_yes" || exit 1 ;;
     esac
 
     if [[ "$dry_run" -eq 1 ]]; then
         ui_info "=== DRY RUN (no changes will be made) ==="
     fi
 
-    ui_sync_u "$file" "$auto_yes"
+    ui_sync_u "$file" "$auto_yes" "$dry_run"
 }
 main "$@"

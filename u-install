@@ -9,9 +9,6 @@ else
 fi
 ui_parse_config
 
-# Background update check (non-blocking)
-(ui_check_for_updates >/dev/null 2>&1 &)
-
 usage() {
     cat <<EOF
 u-install ${UI_VERSION}
@@ -37,7 +34,8 @@ EOF
 }
 
 install_profile() {
-    local profile="$1" profile_file="${UI_DATA_DIR}/profiles/${profile}.txt"
+    local profile="$1"
+    local profile_file="${UI_DATA_DIR}/profiles/${profile}.txt"
     [[ -f "$profile_file" ]] || { ui_err "Profile not found: ${profile}"; return 1; }
     ui_info "Installing profile: ${profile}"
     while IFS= read -r line; do
@@ -85,7 +83,12 @@ main() {
     ui_info "Distribution: ${distro}"
     [[ "$dry_run" -eq 1 ]] && ui_info "=== DRY RUN (no changes will be made) ==="
 
+    # Background update check (non-blocking), only for real operations
+    (ui_check_for_updates >/dev/null 2>&1 &)
+
+    local total=${#packages[@]} idx=0
     for pkg in "${packages[@]}"; do
+        idx=$((idx+1))
         if [[ "$pkg" == @* ]]; then 
             if [[ "$dry_run" -eq 1 ]]; then
                 ui_info "[DRY-RUN] Would install group: ${pkg#@}"
@@ -97,7 +100,9 @@ main() {
 
         local pver=""
         if [[ "$pkg" == *=* ]]; then pver="${pkg#*=}"; pkg="${pkg%%=*}"; fi
+        ui_valid_pkg_name "$pkg" || { ui_err "Invalid package name: '${pkg}'"; exit 1; }
         ui_info "Processing: ${pkg}${pver:+ @ ${pver}}"
+        ui_progress "$idx" "$total" "processing ${pkg}"
 
         if [[ "$dry_run" -eq 1 ]]; then
             local esrc; esrc=$(ui_db_get_source "$pkg")
@@ -112,6 +117,14 @@ main() {
                 ui_info "[DRY-RUN] Would install '${pkg}' via AUR: $(ui_dry_run_aur "$pkg")"
             fi
             continue
+        fi
+
+        if ui_is_critical "$pkg"; then
+            ui_warn "'${pkg}' is a critical system package"
+            if ! ui_confirm_critical "Really install critical package '${pkg}'?"; then
+                ui_info "Skipped ${pkg}"
+                continue
+            fi
         fi
 
         local esrc; esrc=$(ui_db_get_source "$pkg")

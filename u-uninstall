@@ -17,21 +17,31 @@ Usage: u-uninstall [OPTIONS] <PACKAGE...>
 
 Options:
   -y, --yes      Assume yes to all prompts
+  --force        Allow removing critical system packages
   --dry-run      Show what would be removed without making changes
   -V, --version  Show version information
   -h, --help     Show this help message
 EOF
 }
 main() {
-    local packages=() auto_yes=0 dry_run=0
+    local packages=() auto_yes=0 dry_run=0 force=0 refused=0
     for arg in "$@"; do
-        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; -y|--yes) auto_yes=1 ;; --dry-run) dry_run=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
+        case "$arg" in -h|--help) usage; exit 0 ;; -V|--version) ui_print_version; exit 0 ;; -y|--yes) auto_yes=1 ;; --force) force=1 ;; --dry-run) dry_run=1 ;; -*) ui_warn "Unknown: $arg" ;; *) packages+=("$arg") ;; esac
     done
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     [[ "$dry_run" -eq 1 ]] && ui_info "=== DRY RUN (no changes will be made) ==="
 
+    local total=${#packages[@]} idx=0
     for pkg in "${packages[@]}"; do
+        idx=$((idx+1))
+        ui_progress "$idx" "$total" "removing ${pkg}"
+        ui_valid_pkg_name "$pkg" || { ui_err "Invalid package name: '${pkg}'"; exit 1; }
         ui_info "Removing: ${pkg}"
+        if ui_is_critical "$pkg" && [[ "$force" -eq 0 ]]; then
+            ui_err "Refusing to remove critical package '${pkg}' (use --force to override)"
+            refused=1
+            continue
+        fi
         local src; src=$(ui_db_get_source "$pkg")
         if [[ -z "$src" ]]; then
             ui_warn "Not in DB. Auto-detecting..."
@@ -57,5 +67,7 @@ main() {
             *)      ui_err "Unknown source: ${src}" ;;
         esac
     done
+    ui_progress_end
+    if [[ "$refused" -eq 1 ]]; then exit 1; fi
 }
 main "$@"

@@ -15,32 +15,38 @@ Export your u-install setup (installer config + tracked packages) to a
 portable .u file. Copy that file to another machine and run \`u-import\`
 to reproduce the same configuration and packages.
 
-Usage: u-export [FILE]
+Usage: u-export [OPTIONS] [FILE]
 
 Arguments:
   FILE           Output file (default: configuration.u)
 
 Options:
+  -f, --force    Overwrite FILE without asking
   -V, --version  Show version information
   -h, --help     Show this help message
 EOF
 }
 main() {
-    local out="configuration.u"
+    local out="configuration.u" force=0
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage; exit 0 ;;
             -V|--version) ui_print_version; exit 0 ;;
+            -f|--force) force=1 ;;
             -*) ui_warn "Unknown option: $arg" ;;
             *) out="$arg" ;;
         esac
     done
+    if [[ -f "$out" && -s "$out" && "$force" -eq 0 ]]; then
+        ui_warn "File already exists and is not empty: ${out}"
+        ui_confirm_no "Overwrite it?" || exit 1
+    fi
     ui_export_write > "$out"
     ui_uf_sign "$out"
     local n; n="$(ui_db_count)"
     ui_ok "Exported configuration and ${n} package(s) to ${out}"
     if ui_uf_verify "$out"; then
-        ui_info "Integrity: sha256 checksum embedded in [meta]"
+        ui_info "Integrity: sha256 checksum embedded in [meta] (covers [config] and [packages])"
     else
         ui_warn "Integrity: no sha256 hasher found; file left unsigned"
     fi

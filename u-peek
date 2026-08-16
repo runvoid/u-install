@@ -91,7 +91,10 @@ main() {
     [[ ${#packages[@]} -eq 0 ]] && { usage; exit 1; }
     command -v curl >/dev/null 2>&1 || { ui_err "curl is required"; exit 1; }
     local rc=0
-    for pkg in "${packages[@]}"; do peek "$pkg" || rc=1; done
+    for pkg in "${packages[@]}"; do
+        ui_valid_pkg_name "$pkg" || { ui_err "Invalid package name: '${pkg}'"; rc=1; continue; }
+        peek "$pkg" || rc=1
+    done
     exit $rc
 }
 main "$@"

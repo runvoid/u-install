@@ -1,4 +1,11 @@
 # Dev tools profile
-# neovim
-# git
-# htop
+# Format: package [options]
+# Options: --native, --nix, --aur
+
+git --native
+neovim --nix
+ripgrep --nix
+fd --nix
+bat --nix
+htop --native
+tmux --native

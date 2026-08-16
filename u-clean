@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UI_LIB="${HOME}/.local/share/u-install/lib/u-install.sh"
+if [[ -f "$UI_LIB" ]]; then
+    source "$UI_LIB"
+else
+    echo "Run ./install first" >&2
+    exit 1
+fi
+ui_parse_config
+usage() { cat <<EOF
+u-clean ${UI_VERSION}
+
+Reclaim disk space: clear the search cache, cached AUR build directories,
+old Nix generations and native orphan packages. Shows what would be freed
+before touching anything.
+
+Usage: u-clean [OPTIONS]
+
+Options:
+  --dry-run      Show what would be cleaned without making changes
+  -y, --yes      Assume yes to all prompts
+  -V, --version  Show version information
+  -h, --help     Show this help message
+EOF
+}
+dir_size_bytes() {
+    local d="$1"
+    [[ -d "$d" ]] || { echo 0; return; }
+    du -sb "$d" 2>/dev/null | cut -f1 || du -sk "$d" 2>/dev/null | awk '{print $1 * 1024}'
+}
+dir_entry_count() {
+    local d="$1"
+    [[ -d "$d" ]] || { echo 0; return; }
+    find "$d" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
+}
+main() {
+    local auto_yes=0 dry_run=0
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage; exit 0 ;;
+            -V|--version) ui_print_version; exit 0 ;;
+            -y|--yes) auto_yes=1 ;;
+            --dry-run) dry_run=1 ;;
+            -*) ui_warn "Unknown option: $arg" ;;
+        esac
+    done
+
+    ui_info "=== Clean ==="
+    local reclaimed=0
+
+    # --- Search cache ---
+    local cache_n; cache_n="$(dir_entry_count "$UI_CACHE_DIR")"
+    if [[ "$cache_n" -gt 0 ]]; then
+        local cache_sz; cache_sz="$(dir_size_bytes "$UI_CACHE_DIR")"
+        reclaimed=$((reclaimed + cache_sz))
+        ui_info "Search cache: ${cache_n} file(s), $(ui_human_size "$cache_sz")"
+        if [[ "$dry_run" -eq 1 ]]; then
+            ui_info "[DRY-RUN] Would clear ${UI_CACHE_DIR}"
+        elif ui_confirm "Clear search cache?" "$auto_yes"; then
+            ui_clear_search_cache
+            ui_ok "Search cache cleared."
+        fi
+    else
+        ui_info "Search cache: empty"
+    fi
+
+    # --- AUR build directories ---
+    local aur_n; aur_n="$(dir_entry_count "$UI_AUR_DIR")"
+    if [[ "$aur_n" -gt 0 ]]; then
+        local aur_sz; aur_sz="$(dir_size_bytes "$UI_AUR_DIR")"
+        reclaimed=$((reclaimed + aur_sz))
+        ui_info "AUR build cache: ${aur_n} package(s), $(ui_human_size "$aur_sz")"
+        if [[ "$dry_run" -eq 1 ]]; then
+            ui_info "[DRY-RUN] Would remove everything under ${UI_AUR_DIR}"
+        elif ui_confirm "Remove cached AUR clones (they can be re-cloned)?" "$auto_yes"; then
+            find "$UI_AUR_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            ui_ok "AUR build cache cleared."
+        fi
+    else
+        ui_info "AUR build cache: empty"
+    fi
+
+    # --- Old Nix generations ---
+    if ui_has_nix; then
+        local gens; gens="$(nix-env --list-generations 2>/dev/null | wc -l | tr -d ' ')"
+        if [[ "$gens" -gt 1 ]]; then
+            ui_info "Nix generations: ${gens} (old profiles keep store paths alive)"
+            if [[ "$dry_run" -eq 1 ]]; then
+                ui_info "[DRY-RUN] Would run: nix-collect-garbage -d"
+            elif ui_confirm "Delete old Nix generations and collect garbage?" "$auto_yes"; then
+                nix-collect-garbage -d
+                ui_ok "Nix generations collected."
+            fi
+        else
+            ui_info "Nix generations: ${gens} (nothing to clean)"
+        fi
+    else
+        ui_info "Nix: not installed"
+    fi
+
+    # --- Native orphans ---
+    local distro; distro="$(ui_detect_distro)"
+    case "$distro" in
+        arch)
+            local orphans; orphans="$(pacman -Qtdq 2>/dev/null || true)"
+            local o_n; o_n="$(ui_count_lines "$orphans")"
+            if [[ "$o_n" -gt 0 ]]; then
+                ui_info "Native orphans (pacman): ${o_n}: $(echo "$orphans" | tr '\n' ' ')"
+                if [[ "$dry_run" -eq 1 ]]; then
+                    ui_info "[DRY-RUN] Would run: pacman -Rns --noconfirm <orphans>"
+                elif ui_confirm "Remove orphan packages?" "$auto_yes"; then
+                    local oarr; read -ra oarr <<< "$orphans"
+                    ui_priv pacman -Rns --noconfirm "${oarr[@]}"
+                    ui_ok "Orphans removed."
+                fi
+            else
+                ui_info "Native orphans: none"
+            fi
+            ;;
+        debian)
+            local remv; remv="$(ui_priv apt-get -s autoremove 2>/dev/null | grep -c '^Remv' || true)"
+            if [[ "$remv" -gt 0 ]]; then
+                ui_info "Native orphans (apt autoremove): ${remv} package(s)"
+                if [[ "$dry_run" -eq 1 ]]; then
+                    ui_info "[DRY-RUN] Would run: apt-get autoremove --purge -y"
+                elif ui_confirm "Run apt-get autoremove?" "$auto_yes"; then
+                    ui_priv apt-get autoremove --purge -y
+                    ui_ok "Autoremove done."
+                fi
+            else
+                ui_info "Native orphans: none"
+            fi
+            ;;
+        fedora|yum)
+            ui_info "Native orphans: run 'dnf autoremove' manually (no dry-run list available)"
+            ;;
+        suse)
+            local unn; unn="$(zypper packages --unneeded 2>/dev/null | grep -c '^i  ' || true)"
+            if [[ "$unn" -gt 0 ]]; then
+                ui_info "Unneeded packages (zypper): ${unn}"
+                if [[ "$dry_run" -eq 1 ]]; then
+                    ui_info "[DRY-RUN] Would run: zypper rm -u -y <unneeded>"
+                elif ui_confirm "Remove unneeded packages?" "$auto_yes"; then
+                    local uarr; mapfile -t uarr < <(zypper packages --unneeded 2>/dev/null | awk '/^i  /{print $3}')
+                    if [[ ${#uarr[@]} -gt 0 ]]; then
+                        ui_priv zypper --non-interactive rm -u "${uarr[@]}"
+                        ui_ok "Unneeded packages removed."
+                    fi
+                fi
+            else
+                ui_info "Native orphans: none"
+            fi
+            ;;
+        void)
+            local vo; vo="$(xbps-query -O 2>/dev/null | wc -l | tr -d ' ' || true)"
+            if [[ "$vo" -gt 0 ]]; then
+                ui_info "Orphan packages (xbps): ${vo}"
+                if [[ "$dry_run" -eq 1 ]]; then
+                    ui_info "[DRY-RUN] Would run: xbps-remove -O"
+                elif ui_confirm "Remove orphan packages?" "$auto_yes"; then
+                    ui_priv xbps-remove -O
+                    ui_ok "Orphans removed."
+                fi
+            else
+                ui_info "Native orphans: none"
+            fi
+            ;;
+        *)
+            ui_info "Native orphan cleanup not supported for '${distro}'"
+            ;;
+    esac
+
+    if [[ "$dry_run" -eq 1 ]]; then
+        ui_info "Dry run complete. No changes were made."
+    else
+        ui_ok "Clean complete. Cache/build dirs eligible: $(ui_human_size "$reclaimed")."
+    fi
+}
+main "$@"

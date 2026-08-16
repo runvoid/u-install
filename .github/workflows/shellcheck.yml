@@ -20,4 +20,4 @@ jobs:
         run: |
           # Lint the installer, the shared library and every u-* command.
           # Files use `#!/usr/bin/env bash`, so ShellCheck auto-detects bash.
-          shellcheck install lib/u-install.sh u-install u-uninstall u-update u-stats u-doctor u-search u-peek u-list u-export u-import u-help
+          shellcheck install lib/u-install.sh u-install u-uninstall u-update u-upgrade u-stats u-doctor u-search u-peek u-list u-export u-import u-help u-info u-diff u-sync u-outdated u-history u-clean tools/gen-docs.sh .check.sh

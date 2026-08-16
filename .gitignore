@@ -5,3 +5,8 @@ config/local
 # Exported environment snapshots produced by `u-export` are per-machine
 # and should not be committed to the repository.
 *.u
+
+# Local machine-specific WSL regression scripts and throwaway tool
+# downloads (shellcheck/bats binaries) — not part of the project.
+wsl-test/
+.tmp-tools/

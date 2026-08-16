@@ -6,7 +6,7 @@ Stop memorizing `pacman -S`, `apt install`, `nix-env -iA`, and `git clone` into 
 Install `firefox`, `neovim`, or anything else the same way everywhere — from Arch to NixOS to your grandma's Debian.
 
 [![ShellCheck](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/runvoid/u-install/actions/workflows/shellcheck.yml)
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/runvoid/u-install/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/runvoid/u-install/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![asciicast](https://asciinema.org/a/g7zQkLiVpkxhxNpn.svg)](https://asciinema.org/a/g7zQkLiVpkxhxNpn)
 
@@ -86,6 +86,13 @@ Then restart your terminal (or `source ~/.bashrc` / `~/.zshrc`).
 | `u-export [file.u]` | Export config + packages to a portable `.u` file |
 | `u-import <file.u>` | Restore config and reinstall everything |
 | `u-update` | Update system, Nix, and AUR packages |
+| `u-upgrade <pkg>` | Upgrade a single tracked package |
+| `u-outdated` | Show tracked packages with updates available |
+| `u-history [N]` | Show the journal of installs/removals/upgrades |
+| `u-clean` | Reclaim space: caches, AUR builds, orphans, Nix |
+| `u-info <pkg>` | Show detailed info about a tracked package |
+| `u-diff <a.u> <b.u>` | Compare two `.u` snapshot files |
+| `u-sync <file.u>` | Sync current machine with a `.u` snapshot |
 | `u-stats` | Show package statistics |
 | `u-doctor` | Run system health check |
 | `u-help` | Show all commands with descriptions |
@@ -109,7 +116,7 @@ u-import --config-only setup.u     # only restore installer settings
 u-import --latest setup.u          # ignore pinned versions, take latest
 ```
 
-A `.u` file is plain text with three sections — `[meta]`, `[config]`, `[packages]` — so you can `diff`, `git`, and edit it by hand. Each line is `name|source|version`, and `[meta]` carries a SHA-256 checksum to catch tampering.
+A `.u` file is plain text with three sections — `[meta]`, `[config]`, `[packages]` — so you can `diff`, `git`, and edit it by hand. Each line is `name|source|version`, and `[meta]` carries a SHA-256 checksum over `[config]` and `[packages]` (format `u3`) to catch tampering.
 
 ---
 
@@ -130,16 +137,16 @@ A `.u` file is plain text with three sections — `[meta]`, `[config]`, `[packag
 
 ```ini
 [options]
-parallel_downloads = 3
 aur_build_dir = ~/.local/share/u-install/aur
 auto_yes = false
 prefer_source = auto
 colors = true
 log_level = info
-max_aur_builds_parallel = 2
 cleanup_after_build = false
 nix_channel = nixpkgs
 aur_security_check = true
+auto_update_check = true
+update_check_interval_days = 7
 ```
 
 ---
